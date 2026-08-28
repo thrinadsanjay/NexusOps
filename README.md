@@ -45,6 +45,15 @@ docker compose exec openldap ldapadd -x -D "cn=admin,dc=homelab,dc=local" \
 
 > Change all default passwords before any network-exposed deployment.
 
+To run the published GHCR images instead of building locally (after CI has pushed at least once):
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+See [CI/CD (Docker images)](#cicd-docker-images).
+
 ---
 
 ## Feature Reference
@@ -271,9 +280,9 @@ graph TD
 
 | Container | Image / Build | Purpose | Port(s) | Persistence |
 |---|---|---|---|---|
-| `nexusops-backend` | Custom (Python 3.12) | FastAPI REST API, Alembic migrations, bootstrap | `8000` | PostgreSQL |
-| `nexusops-frontend` | Custom (Node 20) | React + Vite SPA | `5173` | None |
-| `nexusops-worker` | Custom (Python 3.12) | Celery background worker (subnet scans, sync) | — | Redis + PostgreSQL |
+| `nexusops-backend` | `ghcr.io/thrinadsanjay/nexusops-backend` (or local build) | FastAPI REST API, Alembic migrations, bootstrap | `8000` | PostgreSQL |
+| `nexusops-frontend` | `ghcr.io/thrinadsanjay/nexusops-frontend` (or local build) | React + Vite SPA | `5173` | None |
+| `nexusops-worker` | same backend image | Celery background worker (subnet scans, sync) | — | Redis + PostgreSQL |
 | `nexusops-postgres` | `postgres:16-alpine` | Primary application database | `5432` | `postgres_data` volume |
 | `nexusops-redis` | `redis:7-alpine` | Celery broker and result backend | `6379` | `redis_data` volume |
 | `nexusops-ldap` | `osixia/openldap:1.5.0` | Bundled OpenLDAP directory server | `389` | `ldap_data`, `ldap_config` volumes |
@@ -299,6 +308,8 @@ graph TD
 
 ```
 NexusOps/
+├── .github/workflows/
+│   └── docker-publish.yml    # Test, build, and push GHCR images
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/router.py      # Auth + admin API routes
@@ -357,6 +368,40 @@ Key `.env` variables:
 | `LDAP_ADMIN_PASSWORD` | `NexusOps2024!` | OpenLDAP admin password |
 | `LDAP_DOMAIN` | `homelab.local` | LDAP domain |
 | `LDAP_BASE_DN` | `dc=homelab,dc=local` | LDAP base distinguished name |
+| `NEXUSOPS_BACKEND_IMAGE` | `ghcr.io/thrinadsanjay/nexusops-backend:latest` | Backend/worker image to pull |
+| `NEXUSOPS_FRONTEND_IMAGE` | `ghcr.io/thrinadsanjay/nexusops-frontend:latest` | Frontend image to pull |
+| `PIP_INDEX_URL` | `https://pypi.org/simple` | Pip index used when building the backend image |
+
+---
+
+## CI/CD (Docker images)
+
+GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) runs tests, then builds and publishes the two application images.
+
+| Image | GHCR |
+|---|---|
+| API + Celery worker | `ghcr.io/thrinadsanjay/nexusops-backend` |
+| UI | `ghcr.io/thrinadsanjay/nexusops-frontend` |
+
+**When images are pushed**
+
+- Pull requests against `Development` or `main`: tests + image **build only** (no push)
+- Push to `Development`: push tags `latest`, `development`, and `sha-<git-sha>`
+- Push to `main`: push tags `stable`, `main`, and `sha-<git-sha>`
+- Git tags matching `v*` (for example `v1.2.0`): semver tags (`1.2.0`, `1.2`)
+- **Actions → Run workflow**: same as a push of that ref
+
+**Optional Docker Hub**
+
+Add repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. When both are set, the workflow also logs in to Docker Hub and tags the same images as `<username>/nexusops-backend` and `<username>/nexusops-frontend`.
+
+**First-time GHCR setup**
+
+1. Under **Settings → Actions → General → Workflow permissions**, allow the `GITHUB_TOKEN` to write packages (or keep the workflow `packages: write` permission and a read/write default).
+2. After the first successful push, open the new package under **Packages**, link it to this repository if GitHub did not already, and set visibility (private is the default).
+3. To pull a private package: `echo $GHCR_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin` using a PAT with `read:packages` (and `write:packages` if you push locally).
+
+The backend image installs Python dependencies from public PyPI by default (`PIP_INDEX_URL` / `PIP_TRUSTED_HOST` build args). Override those in `docker-compose.yml` or `.env` if you need an internal index.
 
 ---
 
