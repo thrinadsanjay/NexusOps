@@ -149,18 +149,6 @@ services:
       - ldap_config:/etc/ldap/slapd.d
     command: "--loglevel warning"
 
-  ldapadmin:
-    image: osixia/phpldapadmin:0.9.0
-    container_name: nexusops-ldapadmin
-    restart: unless-stopped
-    environment:
-      PHPLDAPADMIN_LDAP_HOSTS: openldap
-      PHPLDAPADMIN_HTTPS: "false"
-    ports:
-      - "${LDAPADMIN_BIND:-0.0.0.0}:${LDAPADMIN_PORT:-8082}:80"
-    depends_on:
-      - openldap
-
 volumes:
   postgres_data:
   redis_data:

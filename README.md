@@ -13,55 +13,67 @@ Current Phase  : Phase 10 (LDAP Integration)
 
 | State | Areas |
 |---|---|
-| ✅ Implemented | Auth/RBAC, Network/IPAM, DNS, DHCP, Inventory, PKI, LDAP integration, Dashboard, Audit, API tokens, Bundled OpenLDAP directory |
+| ✅ Implemented | Auth/RBAC, Network/IPAM, DNS, DHCP, Inventory, PKI, LDAP (in-app directory UI + bundled OpenLDAP), Dashboard, Audit, API tokens, CI/CD image publish, image-only server deploy |
 | 🔄 In Progress | Diagnostics (ping/traceroute/port check), SMTP module |
 | 📋 Planned | Ansible automation, n8n integration, Forge integration, PowerDNS backend, Kea DHCP backend, step-ca, SMTP relay (Postfix) |
+
+### Recent additions
+
+- **CI/CD** — GitHub Actions tests the API and UI, then builds and pushes `nexusops-backend` and `nexusops-frontend` to GHCR (`latest` on `Development`, `stable` on `main`). Optional Docker Hub when repository secrets are set.
+- **New-server deploy** — `docker-compose.server.yml` plus `.env.server.example` start the stack from published images. No application source tree is required.
+- **LDAP in the product UI** — directory browse, bind test, user sync, and server registry live under **LDAP**. The old phpLDAPadmin sidecar (`nexusops-ldapadmin` on port 8082) is removed. Bundled **OpenLDAP** remains.
+- **Public PyPI builds** — the backend image installs Python packages from `https://pypi.org/simple` unless you override `PIP_INDEX_URL`.
 
 ---
 
 ## Quick Start
 
-```bash
-# 1. Copy environment config
-cp .env.example .env   # or edit .env directly
+### Local (build from source)
 
-# 2. Start the full stack
+```bash
+cp .env.example .env
 docker compose up -d --build
 
-# 3. Seed the bundled LDAP directory (first run only)
+# Seed the bundled LDAP directory (first run only)
 docker compose cp ldap-bootstrap/init.ldif openldap:/tmp/init.ldif
 docker compose exec openldap ldapadd -x -D "cn=admin,dc=homelab,dc=local" \
   -w NexusOps2024! -f /tmp/init.ldif
 ```
 
+### Local (pull published images)
+
+```bash
+docker login ghcr.io
+docker compose pull
+docker compose up -d
+```
+
+### New server (images only)
+
+Copy `docker-compose.server.yml` and `.env.server.example` to the host:
+
+```bash
+cp .env.server.example .env
+# Set PUBLIC_HOST to this server's DNS name or IP, then matching:
+#   APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL
+# Rotate POSTGRES_PASSWORD (keep DATABASE_URL in sync), JWT_SECRET_KEY, DEFAULT_ADMIN_PASSWORD
+docker login ghcr.io
+docker compose -f docker-compose.server.yml pull
+docker compose -f docker-compose.server.yml up -d
+```
+
+`VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names. See `DEPLOYMENT.md` for GHCR login, package visibility, and LDAP seed on a server.
+
 | Service | URL |
 |---|---|
 | NexusOps UI | http://localhost:5173 |
 | NexusOps API + Swagger | http://localhost:8000/docs |
-| phpLDAPadmin | http://localhost:8082 |
+| LDAP (in the UI) | http://localhost:5173/ldap |
 
 **Default local admin:** `admin` / `ChangeMe123!`  
 **Default LDAP users:** `nexusadmin` / `NexusOps2024!` · `operator1` / `Operator123!` · `viewer1` / `Viewer123!`
 
 > Change all default passwords before any network-exposed deployment.
-
-To run the published GHCR images instead of building locally (after CI has pushed at least once):
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-On a **new server**, copy `docker-compose.server.yml` and `.env.server.example` only:
-
-```bash
-cp .env.server.example .env
-# set PUBLIC_HOST, APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL, and secrets
-docker compose -f docker-compose.server.yml pull
-docker compose -f docker-compose.server.yml up -d
-```
-
-See [CI/CD (Docker images)](#cicd-docker-images) and `DEPLOYMENT.md`.
 
 ---
 
@@ -186,7 +198,7 @@ See [CI/CD (Docker images)](#cicd-docker-images) and `DEPLOYMENT.md`.
 | Sync history log | ✅ |
 | LDAP auth fallback on NexusOps login | ✅ |
 | Auto-provision LDAP users on first login | ✅ |
-| phpLDAPadmin web UI (bundled) | ✅ |
+| In-app directory browse, bind test, and user sync | ✅ |
 | Configurable attribute mapping | ✅ |
 | LDAPS (SSL) | 🔄 (config present, not tested) |
 | LDAP group → NexusOps role mapping | 📋 |
@@ -214,8 +226,8 @@ See [CI/CD (Docker images)](#cicd-docker-images) and `DEPLOYMENT.md`.
 | Feature | Status |
 |---|---|
 | Bundled tools directory | ✅ |
-| LDAP Admin (phpLDAPadmin) link + test | ✅ |
-| API docs link | ✅ |
+| In-app LDAP module (browse / sync / test) | ✅ |
+| API docs and ReDoc links | ✅ |
 | LDAP connection health status | ✅ |
 | Ansible Runner integration | 📋 |
 | n8n integration | 📋 |
@@ -264,7 +276,6 @@ graph TD
     Worker --> Cache
 
     API -->|ldap3| LDAP["OpenLDAP\n(bundled)"]
-    LDAP -->|HTTP| LDAPAdmin["phpLDAPadmin\n(bundled)"]
 
     API -.->|planned| PowerDNS["PowerDNS"]
     API -.->|planned| Kea["Kea DHCP"]
@@ -295,7 +306,6 @@ graph TD
 | `nexusops-postgres` | `postgres:16-alpine` | Primary application database | `5432` | `postgres_data` volume |
 | `nexusops-redis` | `redis:7-alpine` | Celery broker and result backend | `6379` | `redis_data` volume |
 | `nexusops-ldap` | `osixia/openldap:1.5.0` | Bundled OpenLDAP directory server | `389` | `ldap_data`, `ldap_config` volumes |
-| `nexusops-ldapadmin` | `osixia/phpldapadmin:0.9.0` | Web-based LDAP directory manager | `8082` | None |
 
 ---
 
@@ -373,9 +383,16 @@ Key `.env` variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops` | PostgreSQL connection |
+| `PUBLIC_HOST` | `localhost` | DNS name or IP browsers use to reach this host (server compose) |
+| `APP_BASE_URL` | `http://localhost:8000` | Public API URL |
+| `FRONTEND_URL` | `http://localhost:5173` | Public UI URL (CORS allow-origin) |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | API URL the browser calls |
+| `DATABASE_URL` | `postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops` | PostgreSQL connection (must match `POSTGRES_*`) |
+| `POSTGRES_PASSWORD` | `change-me` | PostgreSQL password |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection |
 | `JWT_SECRET_KEY` | `change-me-in-production` | JWT signing key |
+| `DEFAULT_ADMIN_USERNAME` | `admin` | First local admin (empty database only) |
+| `DEFAULT_ADMIN_PASSWORD` | `ChangeMe123!` | First local admin password |
 | `SCAN_NETWORKS` | *(empty)* | Comma-separated CIDRs for network discovery |
 | `LDAP_ADMIN_PASSWORD` | `NexusOps2024!` | OpenLDAP admin password |
 | `LDAP_DOMAIN` | `homelab.local` | LDAP domain |
@@ -383,6 +400,8 @@ Key `.env` variables:
 | `NEXUSOPS_BACKEND_IMAGE` | `ghcr.io/thrinadsanjay/nexusops-backend:latest` | Backend/worker image to pull |
 | `NEXUSOPS_FRONTEND_IMAGE` | `ghcr.io/thrinadsanjay/nexusops-frontend:latest` | Frontend image to pull |
 | `PIP_INDEX_URL` | `https://pypi.org/simple` | Pip index used when building the backend image |
+
+Server bind/port overrides (`BACKEND_PORT`, `FRONTEND_PORT`, `POSTGRES_BIND`, and so on) are listed in `.env.server.example`.
 
 ---
 
@@ -423,4 +442,5 @@ The backend image installs Python dependencies from public PyPI by default (`PIP
 - LDAP bind passwords are stored in plaintext in the database. A secrets management integration is planned.
 - The `NET_RAW` / `NET_ADMIN` capabilities on the backend container are required for ICMP-based subnet scanning. Remove them if scanning is not needed.
 - JWT tokens expire after 60 minutes by default (`SESSION_TIMEOUT_MINUTES`).
+- On a new server, Postgres, Redis, and LDAP listen on loopback only unless you change `*_BIND`. Do not expose those ports publicly.
 

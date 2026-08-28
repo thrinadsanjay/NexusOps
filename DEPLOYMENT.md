@@ -37,7 +37,7 @@ docker compose -f docker-compose.server.yml up -d
 
 `VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names like `http://backend:8000`. CORS is taken from `FRONTEND_URL`.
 
-Postgres, Redis, and LDAP ports bind to `127.0.0.1` by default. The UI (`FRONTEND_PORT`, default 5173), API (`BACKEND_PORT`, default 8000), and phpLDAPadmin (`LDAPADMIN_PORT`, default 8082) bind on all interfaces.
+Postgres, Redis, and LDAP ports bind to `127.0.0.1` by default. The UI (`FRONTEND_PORT`, default 5173) and API (`BACKEND_PORT`, default 8000) bind on all interfaces. Manage the bundled OpenLDAP directory from the NexusOps **LDAP** page (`/ldap`); there is no separate LDAP admin container.
 
 Optional LDAP directory seed (only if you also copied `ldap-bootstrap/init.ldif` and kept the default `dc=homelab,dc=local` tree):
 
@@ -58,11 +58,12 @@ Override the tags with `NEXUSOPS_BACKEND_IMAGE` and `NEXUSOPS_FRONTEND_IMAGE` in
 
 This stack includes:
 
-- PostgreSQL on port 5432
-- Redis on port 6379
+- PostgreSQL (loopback `5432` on server compose)
+- Redis (loopback `6379` on server compose)
 - FastAPI backend on port 8000
 - Celery worker
 - Vite frontend on port 5173
+- OpenLDAP (loopback `389` on server compose; manage it from the NexusOps LDAP page)
 
 ## CI/CD images
 
