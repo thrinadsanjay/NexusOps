@@ -31,18 +31,18 @@ export type TreeNode = { dn: string; name: string; kind: string }
 type Tab = 'users' | 'groups' | 'ous' | 'tree' | 'sync'
 
 const TEST_BADGE: Record<string, string> = {
-  ok: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  error: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  ok: 'bg-ok/15 text-ok border-ok/30',
+  error: 'bg-danger/15 text-danger border-danger/30',
 }
 const SYNC_BADGE: Record<string, string> = {
-  success: 'bg-emerald-500/15 text-emerald-300',
-  error: 'bg-rose-500/15 text-rose-300',
-  running: 'bg-amber-500/15 text-amber-300',
+  success: 'bg-ok/15 text-ok',
+  error: 'bg-danger/15 text-danger',
+  running: 'bg-warn/15 text-warn',
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-sky-400'
-const lbl = 'mb-2 block text-sm font-medium text-slate-200'
-const card = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
+const input = 'w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent'
+const lbl = 'mb-2 block text-sm font-medium text-ink'
+const card = 'rounded-2xl border border-line bg-surface p-5 shadow-card'
 
 async function readError(response: Response, fallback: string): Promise<string> {
   try {
@@ -149,16 +149,16 @@ export function LdapPanel() {
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-sky-300">Infrastructure / Directory</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Directory Manager</h2>
-        <p className="mt-2 text-slate-300">Create and manage LDAP users, groups, and organizational units the same way you would in Active Directory Users and Computers.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / Directory</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Directory Manager</h2>
+        <p className="mt-2 text-muted">Create and manage LDAP users, groups, and organizational units the same way you would in Active Directory Users and Computers.</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Directories</h3>
-            <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110">
+            <h3 className="text-sm font-semibold text-ink">Directories</h3>
+            <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg transition hover:opacity-90">
               {showForm ? '✕' : '+ Server'}
             </button>
           </div>
@@ -169,8 +169,8 @@ export function LdapPanel() {
               <div><label className={lbl}>Host</label><input value={fHost} onChange={(e) => setFHost(e.target.value)} required placeholder="openldap" className={`${input} font-mono`} /></div>
               <div><label className={lbl}>Port</label><input type="number" value={fPort} onChange={(e) => setFPort(e.target.value)} className={input} /></div>
               <div className="flex gap-4">
-                <label className="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={fSsl} onChange={(e) => setFSsl(e.target.checked)} className="h-4 w-4" /> SSL</label>
-                <label className="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={fTls} onChange={(e) => setFTls(e.target.checked)} className="h-4 w-4" /> STARTTLS</label>
+                <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={fSsl} onChange={(e) => setFSsl(e.target.checked)} className="h-4 w-4" /> SSL</label>
+                <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={fTls} onChange={(e) => setFTls(e.target.checked)} className="h-4 w-4" /> STARTTLS</label>
               </div>
               <div><label className={lbl}>Base DN</label><input value={fBaseDn} onChange={(e) => setFBaseDn(e.target.value)} required placeholder="dc=homelab,dc=local" className={`${input} font-mono`} /></div>
               <div><label className={lbl}>Bind DN</label><input value={fBindDn} onChange={(e) => setFBindDn(e.target.value)} placeholder="cn=admin,dc=homelab,dc=local" className={`${input} font-mono`} /></div>
@@ -180,13 +180,13 @@ export function LdapPanel() {
               <div><label className={lbl}>User filter</label><input value={fFilter} onChange={(e) => setFFilter(e.target.value)} className={`${input} font-mono`} /></div>
               <div><label className={lbl}>Attribute map (JSON)</label><textarea value={fAttrMap} onChange={(e) => setFAttrMap(e.target.value)} rows={3} className={`${input} font-mono text-xs`} /></div>
               <div><label className={lbl}>Notes</label><input value={fNotes} onChange={(e) => setFNotes(e.target.value)} className={input} /></div>
-              {fErr && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{fErr}</p>}
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add server</button>
+              {fErr && <p className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{fErr}</p>}
+              <button type="submit" className="w-full rounded-2xl bg-accent py-2.5 text-sm font-semibold text-accent-fg transition hover:opacity-90">Add server</button>
             </form>
           )}
 
           {servers.length === 0 ? (
-            <p className={`${card} text-center text-sm text-slate-400`}>No LDAP servers configured yet.</p>
+            <p className={`${card} text-center text-sm text-muted`}>No LDAP servers configured yet.</p>
           ) : servers.map((svr) => (
             <div
               key={svr.id}
@@ -194,54 +194,54 @@ export function LdapPanel() {
               tabIndex={0}
               onClick={() => setSelected(svr)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(svr) }}
-              className={`group w-full cursor-pointer rounded-2xl border p-4 text-left transition ${selected?.id === svr.id ? 'border-sky-500/40 bg-sky-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}
+              className={`group w-full cursor-pointer rounded-2xl border p-4 text-left transition ${selected?.id === svr.id ? 'border-accent/40 bg-accent/10' : 'border-line bg-surface hover:border-accent/40'}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-white">{svr.name}</span>
-                <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(svr.id, svr.name) }} className="hidden text-xs text-rose-400 hover:text-rose-300 group-hover:block">✕</button>
+                <span className="font-semibold text-ink">{svr.name}</span>
+                <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(svr.id, svr.name) }} className="hidden text-xs text-danger hover:text-danger group-hover:block">✕</button>
               </div>
-              <div className="font-mono text-[11px] text-slate-400">{svr.host}:{svr.port}{svr.use_ssl ? ' (SSL)' : ''}</div>
+              <div className="font-mono text-[11px] text-muted">{svr.host}:{svr.port}{svr.use_ssl ? ' (SSL)' : ''}</div>
               <div className="mt-1 flex items-center gap-2">
                 {svr.last_test_status && (
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${TEST_BADGE[svr.last_test_status] ?? 'bg-slate-700 text-slate-400'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${TEST_BADGE[svr.last_test_status] ?? 'bg-elevated text-muted'}`}>
                     {svr.last_test_status === 'ok' ? '✓ Connected' : '✗ Error'}
                   </span>
                 )}
-                {svr.last_sync_at && <span className="text-[10px] text-slate-500">synced {new Date(svr.last_sync_at).toLocaleDateString()}</span>}
+                {svr.last_sync_at && <span className="text-[10px] text-faint">synced {new Date(svr.last_sync_at).toLocaleDateString()}</span>}
               </div>
             </div>
           ))}
         </div>
 
         {!selected ? (
-          <div className={`${card} flex items-center justify-center py-16 text-slate-400`}>Select a directory to manage users, groups, and OUs.</div>
+          <div className={`${card} flex items-center justify-center py-16 text-muted`}>Select a directory to manage users, groups, and OUs.</div>
         ) : (
           <div className="space-y-5">
             <div className={`${card} flex flex-col gap-4 md:flex-row md:items-start md:justify-between`}>
               <div>
-                <h3 className="text-xl font-bold text-white">{selected.name}</h3>
-                <div className="mt-1 font-mono text-sm text-slate-400">{selected.host}:{selected.port} · {selected.base_dn}</div>
-                {selected.notes && <div className="mt-2 text-sm text-slate-300">{selected.notes}</div>}
+                <h3 className="text-xl font-bold text-ink">{selected.name}</h3>
+                <div className="mt-1 font-mono text-sm text-muted">{selected.host}:{selected.port} · {selected.base_dn}</div>
+                {selected.notes && <div className="mt-2 text-sm text-muted">{selected.notes}</div>}
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={handleTest} disabled={testing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
+                <button onClick={handleTest} disabled={testing} className="rounded-2xl border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60">
                   {testing ? '⟳ Testing…' : '⟳ Test connection'}
                 </button>
-                <button onClick={handleSync} disabled={syncing} className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-500/20 transition hover:brightness-110 disabled:opacity-60">
+                <button onClick={handleSync} disabled={syncing} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-sm transition hover:opacity-90 disabled:opacity-60">
                   {syncing ? '⟳ Syncing…' : '⟳ Sync to NexusOps'}
                 </button>
               </div>
             </div>
 
             {testResult && (
-              <div className={`rounded-2xl border px-4 py-3 text-sm ${testResult.status === 'ok' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>
+              <div className={`rounded-2xl border px-4 py-3 text-sm ${testResult.status === 'ok' ? 'border-ok/30 bg-ok/10 text-ok' : 'border-danger/30 bg-danger/10 text-danger'}`}>
                 {testResult.status === 'ok' ? '✓ ' : '✗ '}{testResult.message}
               </div>
             )}
 
             <div className="flex flex-wrap gap-2">
               {tabs.map((item) => (
-                <button key={item.id} onClick={() => setTab(item.id)} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${tab === item.id ? 'bg-sky-500 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                <button key={item.id} onClick={() => setTab(item.id)} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${tab === item.id ? 'bg-accent text-accent-fg' : 'bg-elevated text-muted hover:bg-elevated'}`}>
                   {item.label}
                 </button>
               ))}
@@ -343,18 +343,18 @@ function UsersTab({ server }: { server: LdapServer }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search username, name, or email…" className="min-w-[200px] flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-sky-400" />
-        <select value={enabledFilter} onChange={(e) => setEnabledFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100">
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search username, name, or email…" className="min-w-[200px] flex-1 rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent" />
+        <select value={enabledFilter} onChange={(e) => setEnabledFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink">
           <option value="">All accounts</option>
           <option value="true">Enabled</option>
           <option value="false">Disabled</option>
         </select>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950">{showForm && !editing ? '✕ Cancel' : '+ User'}</button>
+        <button onClick={() => { resetForm(); setShowForm(true) }} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg">{showForm && !editing ? '✕ Cancel' : '+ User'}</button>
       </div>
 
       {showForm && (
         <form onSubmit={handleSubmit} className={`${card} grid gap-3 md:grid-cols-2 xl:grid-cols-3`}>
-          <div className="md:col-span-2 xl:col-span-3 text-sm font-semibold text-white">{editing ? `Edit ${editing.username}` : 'New directory user'}</div>
+          <div className="md:col-span-2 xl:col-span-3 text-sm font-semibold text-ink">{editing ? `Edit ${editing.username}` : 'New directory user'}</div>
           {!editing && <div><label className={lbl}>Username</label><input value={username} onChange={(e) => setUsername(e.target.value)} required className={`${input} font-mono`} /></div>}
           {!editing && <div><label className={lbl}>Password</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} className={input} /></div>}
           {editing && <div className="md:col-span-2"><label className={lbl}>Reset password</label><input type="password" value={resetPw} onChange={(e) => setResetPw(e.target.value)} minLength={8} placeholder="Leave blank to keep current password" className={input} /></div>}
@@ -366,45 +366,45 @@ function UsersTab({ server }: { server: LdapServer }) {
           <div><label className={lbl}>Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} className={input} /></div>
           <div><label className={lbl}>Department</label><input value={department} onChange={(e) => setDepartment(e.target.value)} className={input} /></div>
           <div><label className={lbl}>Office</label><input value={office} onChange={(e) => setOffice(e.target.value)} className={input} /></div>
-          <label className="flex items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4" /> Account enabled</label>
+          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-4 w-4" /> Account enabled</label>
           {groups.length > 0 && (
             <div className="md:col-span-2 xl:col-span-3">
               <label className={lbl}>Member of</label>
               <div className="flex flex-wrap gap-2">
                 {groups.map((group) => (
-                  <button key={group.name} type="button" onClick={() => toggleGroup(group.name)} className={`rounded-full border px-3 py-1 text-xs font-medium ${memberOf.includes(group.name) ? 'border-sky-500/50 bg-sky-500/15 text-sky-300' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>{group.name}</button>
+                  <button key={group.name} type="button" onClick={() => toggleGroup(group.name)} className={`rounded-full border px-3 py-1 text-xs font-medium ${memberOf.includes(group.name) ? 'border-accent/50 bg-accent/15 text-accent' : 'border-line bg-canvas text-muted'}`}>{group.name}</button>
                 ))}
               </div>
             </div>
           )}
-          {error && <p className="md:col-span-2 xl:col-span-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+          {error && <p className="md:col-span-2 xl:col-span-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
           <div className="md:col-span-2 xl:col-span-3 flex justify-end gap-2">
-            <button type="button" onClick={resetForm} className="rounded-2xl border border-slate-700 px-4 py-2.5 text-sm text-slate-300">Cancel</button>
-            <button type="submit" className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950">{editing ? 'Save user' : 'Create user'}</button>
+            <button type="button" onClick={resetForm} className="rounded-2xl border border-line px-4 py-2.5 text-sm text-muted">Cancel</button>
+            <button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-fg">{editing ? 'Save user' : 'Create user'}</button>
           </div>
         </form>
       )}
 
-      <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80">
-        <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-4 py-3 font-medium">User</th><th className="px-4 py-3 font-medium">Email</th><th className="px-4 py-3 font-medium">Title / Dept</th><th className="px-4 py-3 font-medium">Groups</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr></thead>
-          <tbody className="divide-y divide-slate-800">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="min-w-full divide-y divide-line text-left text-sm">
+          <thead className="bg-canvas/80 text-muted"><tr><th className="px-4 py-3 font-medium">User</th><th className="px-4 py-3 font-medium">Email</th><th className="px-4 py-3 font-medium">Title / Dept</th><th className="px-4 py-3 font-medium">Groups</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr></thead>
+          <tbody className="divide-y divide-line">
             {users.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">No directory users found.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-muted">No directory users found.</td></tr>
             ) : users.map((user) => (
-              <tr key={user.dn} className="hover:bg-slate-800/50">
+              <tr key={user.dn} className="hover:bg-elevated/70">
                 <td className="px-4 py-3">
-                  <div className="font-semibold text-white">{user.display_name || user.username}</div>
-                  <div className="font-mono text-[11px] text-slate-400">{user.username}</div>
+                  <div className="font-semibold text-ink">{user.display_name || user.username}</div>
+                  <div className="font-mono text-[11px] text-muted">{user.username}</div>
                 </td>
-                <td className="px-4 py-3 text-slate-300">{user.email ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-300">{[user.title, user.department].filter(Boolean).join(' · ') || '—'}</td>
-                <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.member_of.length === 0 ? <span className="text-slate-500">—</span> : user.member_of.map((name) => <span key={name} className="rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-300">{name}</span>)}</div></td>
-                <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${user.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>{user.enabled ? 'Enabled' : 'Disabled'}</span></td>
+                <td className="px-4 py-3 text-muted">{user.email ?? '—'}</td>
+                <td className="px-4 py-3 text-muted">{[user.title, user.department].filter(Boolean).join(' · ') || '—'}</td>
+                <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.member_of.length === 0 ? <span className="text-faint">—</span> : user.member_of.map((name) => <span key={name} className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{name}</span>)}</div></td>
+                <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${user.enabled ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>{user.enabled ? 'Enabled' : 'Disabled'}</span></td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => startEdit(user)} className="rounded-xl border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800">Edit</button>
-                    <button onClick={() => handleDelete(user)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300">Delete</button>
+                    <button onClick={() => startEdit(user)} className="rounded-xl border border-line px-3 py-1 text-xs text-muted hover:bg-elevated">Edit</button>
+                    <button onClick={() => handleDelete(user)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">Delete</button>
                   </div>
                 </td>
               </tr>
@@ -485,8 +485,8 @@ function GroupsTab({ server }: { server: LdapServer }) {
     <div className="grid gap-4 lg:grid-cols-[280px_1fr]">
       <div className="space-y-3">
         <div className="flex gap-2">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search groups…" className="flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" />
-          <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950">+</button>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search groups…" className="flex-1 rounded-2xl border border-line bg-canvas px-3 py-2 text-sm text-ink" />
+          <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg">+</button>
         </div>
         {showForm && (
           <form onSubmit={handleCreate} className={`${card} space-y-3`}>
@@ -496,53 +496,53 @@ function GroupsTab({ server }: { server: LdapServer }) {
               <label className={lbl}>Initial members</label>
               <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
                 {users.map((user) => (
-                  <label key={user.dn} className="flex items-center gap-2 text-xs text-slate-300">
+                  <label key={user.dn} className="flex items-center gap-2 text-xs text-muted">
                     <input type="checkbox" checked={members.includes(user.dn)} onChange={() => setMembers((p) => p.includes(user.dn) ? p.filter((item) => item !== user.dn) : [...p, user.dn])} />
                     {user.username}
                   </label>
                 ))}
               </div>
             </div>
-            {error && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
-            <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 py-2 text-sm font-semibold text-slate-950">Create group</button>
+            {error && <p className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+            <button type="submit" className="w-full rounded-2xl bg-accent py-2 text-sm font-semibold text-accent-fg">Create group</button>
           </form>
         )}
         {groups.map((group) => (
-          <div key={group.dn} role="button" tabIndex={0} onClick={() => setSelected(group)} className={`group cursor-pointer rounded-2xl border p-3 ${selected?.name === group.name ? 'border-sky-500/40 bg-sky-500/10' : 'border-slate-800 bg-slate-900/80'}`}>
+          <div key={group.dn} role="button" tabIndex={0} onClick={() => setSelected(group)} className={`group cursor-pointer rounded-2xl border p-3 ${selected?.name === group.name ? 'border-accent/40 bg-accent/10' : 'border-line bg-surface'}`}>
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-white">{group.name}</span>
-              <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(group) }} className="hidden text-xs text-rose-400 group-hover:block">✕</button>
+              <span className="font-semibold text-ink">{group.name}</span>
+              <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(group) }} className="hidden text-xs text-danger group-hover:block">✕</button>
             </div>
-            <div className="text-[11px] text-slate-400">{group.member_count} members</div>
+            <div className="text-[11px] text-muted">{group.member_count} members</div>
           </div>
         ))}
       </div>
       {!selected ? (
-        <div className={`${card} flex items-center justify-center text-slate-400`}>Select a group to manage membership.</div>
+        <div className={`${card} flex items-center justify-center text-muted`}>Select a group to manage membership.</div>
       ) : (
         <div className={`${card} space-y-4`}>
           <div>
-            <h4 className="text-lg font-bold text-white">{selected.name}</h4>
-            <p className="text-sm text-slate-400">{selected.description || selected.dn}</p>
+            <h4 className="text-lg font-bold text-ink">{selected.name}</h4>
+            <p className="text-sm text-muted">{selected.description || selected.dn}</p>
           </div>
           <form onSubmit={handleAddMember} className="flex gap-2">
-            <select value={addMember} onChange={(e) => setAddMember(e.target.value)} className="flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100">
+            <select value={addMember} onChange={(e) => setAddMember(e.target.value)} className="flex-1 rounded-2xl border border-line bg-canvas px-3 py-2 text-sm text-ink">
               <option value="">Add a member…</option>
               {users.filter((user) => !selected.members.includes(user.dn)).map((user) => (
                 <option key={user.dn} value={user.username}>{user.display_name || user.username}</option>
               ))}
             </select>
-            <button type="submit" className="rounded-2xl bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950">Add</button>
+            <button type="submit" className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg">Add</button>
           </form>
-          {error && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+          {error && <p className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
           <div className="space-y-2">
-            {selected.members.length === 0 ? <p className="text-sm text-slate-400">No members.</p> : selected.members.map((member) => (
-              <div key={member} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2">
+            {selected.members.length === 0 ? <p className="text-sm text-muted">No members.</p> : selected.members.map((member) => (
+              <div key={member} className="flex items-center justify-between rounded-xl border border-line bg-canvas/60 px-3 py-2">
                 <div>
-                  <div className="text-sm text-white">{memberLabel(member)}</div>
-                  <div className="font-mono text-[11px] text-slate-500">{member}</div>
+                  <div className="text-sm text-ink">{memberLabel(member)}</div>
+                  <div className="font-mono text-[11px] text-faint">{member}</div>
                 </div>
-                <button onClick={() => handleRemoveMember(member)} className="text-xs text-rose-400">Remove</button>
+                <button onClick={() => handleRemoveMember(member)} className="text-xs text-danger">Remove</button>
               </div>
             ))}
           </div>
@@ -585,18 +585,18 @@ function OusTab({ server }: { server: LdapServer }) {
         <div><label className={lbl}>OU name</label><input value={name} onChange={(e) => setName(e.target.value)} required className={input} /></div>
         <div><label className={lbl}>Parent DN</label><input value={parentDn} onChange={(e) => setParentDn(e.target.value)} required className={`${input} font-mono`} /></div>
         <div><label className={lbl}>Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className={input} /></div>
-        {error && <p className="md:col-span-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
-        <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950">Create OU</button></div>
+        {error && <p className="md:col-span-3 rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+        <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-fg">Create OU</button></div>
       </form>
-      <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80">
-        <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">DN</th><th className="px-4 py-3" /></tr></thead>
-          <tbody className="divide-y divide-slate-800">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="min-w-full divide-y divide-line text-left text-sm">
+          <thead className="bg-canvas/80 text-muted"><tr><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">DN</th><th className="px-4 py-3" /></tr></thead>
+          <tbody className="divide-y divide-line">
             {ous.map((ou) => (
               <tr key={ou.dn}>
-                <td className="px-4 py-3 text-white">{ou.name}</td>
-                <td className="px-4 py-3 font-mono text-[11px] text-slate-400">{ou.dn}</td>
-                <td className="px-4 py-3 text-right"><button onClick={() => handleDelete(ou)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300">Delete</button></td>
+                <td className="px-4 py-3 text-ink">{ou.name}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-muted">{ou.dn}</td>
+                <td className="px-4 py-3 text-right"><button onClick={() => handleDelete(ou)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">Delete</button></td>
               </tr>
             ))}
           </tbody>
@@ -626,23 +626,23 @@ function TreeTab({ server }: { server: LdapServer }) {
 
   return (
     <div className={`${card} space-y-4`}>
-      <div className="flex flex-wrap gap-1 text-[11px] text-slate-400">
+      <div className="flex flex-wrap gap-1 text-[11px] text-muted">
         {crumbs.slice().reverse().map((dn, index) => (
-          <button key={dn} onClick={() => load(dn)} className="rounded-lg px-2 py-1 hover:bg-slate-800 hover:text-sky-300">
+          <button key={dn} onClick={() => load(dn)} className="rounded-lg px-2 py-1 hover:bg-elevated hover:text-accent">
             {index === 0 ? dn : dn.split(',')[0]}
             {index < crumbs.length - 1 ? ' /' : ''}
           </button>
         ))}
       </div>
-      {error && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+      {error && <p className="rounded-xl bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
       <div className="space-y-2">
-        {nodes.length === 0 ? <p className="text-sm text-slate-400">No child entries.</p> : nodes.map((node) => (
-          <button key={node.dn} onClick={() => node.kind === 'ou' ? load(node.dn) : undefined} className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-left">
+        {nodes.length === 0 ? <p className="text-sm text-muted">No child entries.</p> : nodes.map((node) => (
+          <button key={node.dn} onClick={() => node.kind === 'ou' ? load(node.dn) : undefined} className="flex w-full items-center justify-between rounded-xl border border-line bg-canvas/60 px-3 py-2 text-left">
             <div>
-              <div className="text-sm text-white">{node.name}</div>
-              <div className="font-mono text-[11px] text-slate-500">{node.dn}</div>
+              <div className="text-sm text-ink">{node.name}</div>
+              <div className="font-mono text-[11px] text-faint">{node.dn}</div>
             </div>
-            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] uppercase text-slate-300">{node.kind}</span>
+            <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] uppercase text-muted">{node.kind}</span>
           </button>
         ))}
       </div>
@@ -653,21 +653,21 @@ function TreeTab({ server }: { server: LdapServer }) {
 function SyncTab({ logs }: { logs: SyncLog[] }) {
   return (
     <div className={card}>
-      <h4 className="mb-4 text-sm font-semibold text-white">Sync history</h4>
+      <h4 className="mb-4 text-sm font-semibold text-ink">Sync history</h4>
       {logs.length === 0 ? (
-        <p className="text-sm text-slate-400">No sync runs yet. Use “Sync to NexusOps” to import directory users into local accounts.</p>
+        <p className="text-sm text-muted">No sync runs yet. Use “Sync to NexusOps” to import directory users into local accounts.</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-800">
-          <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-            <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-3 py-3 font-medium">Started</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Found</th><th className="px-3 py-3 font-medium">Created</th><th className="px-3 py-3 font-medium">Updated</th></tr></thead>
-            <tbody className="divide-y divide-slate-800">
+        <div className="overflow-x-auto rounded-2xl border border-line">
+          <table className="min-w-full divide-y divide-line text-left text-sm">
+            <thead className="bg-canvas/80 text-muted"><tr><th className="px-3 py-3 font-medium">Started</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Found</th><th className="px-3 py-3 font-medium">Created</th><th className="px-3 py-3 font-medium">Updated</th></tr></thead>
+            <tbody className="divide-y divide-line">
               {logs.map((log) => (
                 <tr key={log.id}>
-                  <td className="px-3 py-3 text-[11px] text-slate-300">{new Date(log.started_at).toLocaleString()}</td>
-                  <td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${SYNC_BADGE[log.status] ?? 'bg-slate-700 text-slate-300'}`}>{log.status}</span></td>
-                  <td className="px-3 py-3 text-white">{log.users_found}</td>
-                  <td className="px-3 py-3 text-emerald-400">{log.users_created}</td>
-                  <td className="px-3 py-3 text-cyan-400">{log.users_updated}</td>
+                  <td className="px-3 py-3 text-[11px] text-muted">{new Date(log.started_at).toLocaleString()}</td>
+                  <td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${SYNC_BADGE[log.status] ?? 'bg-elevated text-muted'}`}>{log.status}</span></td>
+                  <td className="px-3 py-3 text-ink">{log.users_found}</td>
+                  <td className="px-3 py-3 text-ok">{log.users_created}</td>
+                  <td className="px-3 py-3 text-accent">{log.users_updated}</td>
                 </tr>
               ))}
             </tbody>
@@ -675,7 +675,7 @@ function SyncTab({ logs }: { logs: SyncLog[] }) {
         </div>
       )}
       {logs.some((l) => l.error_message) && (
-        <div className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+        <div className="mt-3 rounded-2xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
           {logs.find((l) => l.error_message)?.error_message}
         </div>
       )}

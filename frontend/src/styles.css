@@ -2,20 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+html.light {
+  color-scheme: light;
+  --nx-canvas: 244 246 251;
+  --nx-surface: 255 255 255;
+  --nx-elevated: 241 244 250;
+  --nx-ink: 15 23 42;
+  --nx-muted: 71 85 105;
+  --nx-faint: 100 116 139;
+  --nx-line: 226 232 240;
+  --nx-accent: 79 70 229;
+  --nx-accent-fg: 255 255 255;
+  --nx-accent-soft: 238 242 255;
+  --nx-ok: 5 150 105;
+  --nx-warn: 180 83 9;
+  --nx-danger: 220 38 38;
+}
+
+html.dark {
   color-scheme: dark;
+  --nx-canvas: 10 14 26;
+  --nx-surface: 17 24 39;
+  --nx-elevated: 24 33 52;
+  --nx-ink: 241 245 249;
+  --nx-muted: 148 163 184;
+  --nx-faint: 100 116 139;
+  --nx-line: 51 65 85;
+  --nx-accent: 129 140 248;
+  --nx-accent-fg: 15 23 42;
+  --nx-accent-soft: 30 27 75;
+  --nx-ok: 52 211 153;
+  --nx-warn: 251 191 36;
+  --nx-danger: 248 113 113;
+}
+
+:root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  background: #020617;
-  color: #e2e8f0;
+  background: rgb(var(--nx-canvas));
+  color: rgb(var(--nx-ink));
 }
 
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   min-height: 100%;
   min-width: 100%;
-  background: #020617;
+  background: rgb(var(--nx-canvas));
 }
 
 body {
@@ -32,8 +68,8 @@ a {
   top: -100%;
   z-index: 100;
   border-radius: 0.5rem;
-  background: #22d3ee;
-  color: #020617;
+  background: rgb(var(--nx-accent));
+  color: rgb(var(--nx-accent-fg));
   padding: 0.5rem 0.75rem;
   font-weight: 600;
 }
@@ -43,6 +79,32 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid #22d3ee;
+  outline: 2px solid rgb(var(--nx-accent));
   outline-offset: 2px;
+}
+
+@layer components {
+  .nx-kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-accent;
+  }
+
+  .nx-title {
+    @apply mt-2 text-3xl font-semibold tracking-tight text-ink;
+  }
+
+  .nx-card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+  }
+
+  .nx-input {
+    @apply w-full rounded-xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent/20;
+  }
+
+  .nx-btn-primary {
+    @apply rounded-xl bg-accent px-4 py-2.5 font-semibold text-accent-fg transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .nx-btn-ghost {
+    @apply rounded-xl border border-line bg-surface px-4 py-2.5 font-medium text-ink transition hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+  }
 }

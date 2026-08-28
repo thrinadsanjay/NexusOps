@@ -1,6 +1,7 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { apiFetch, clearAuth, getToken, readStoredUser, storeAuth } from './api/client'
+import { Dashboard } from './Dashboard'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
 import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
 import { DnsOverview } from './Dns'
@@ -10,6 +11,7 @@ import { LdapPanel } from './Ldap'
 import { ToolsPanel } from './Tools'
 import { AppShell } from './layout/AppShell'
 import { LoginPage } from './layout/LoginPage'
+import { ThemeProvider } from './theme'
 
 type AuthUser = {
   id: number
@@ -96,7 +98,15 @@ function hasPermission(user: AuthUser | null, permission: string | null): boolea
   return (user.permissions ?? []).includes(permission)
 }
 
-function App() {
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppRoutes />
+    </ThemeProvider>
+  )
+}
+
+function AppRoutes() {
   const [token, setToken] = useState<string | null>(() => getToken() || null)
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser<AuthUser>())
   const [users, setUsers] = useState<UserRecord[]>([])
@@ -350,7 +360,7 @@ function App() {
     <AppShell user={user!} canAccess={(permission) => hasPermission(user, permission)} onLogout={handleLogout}>
         <Routes>
           <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="/" element={<Overview user={user!} />} />
+          <Route path="/" element={<Dashboard user={user!} canAccess={(permission) => hasPermission(user, permission)} />} />
           <Route path="/users" element={hasPermission(user, 'users:read') ? <UsersPanel users={users} roles={roles} canWrite={canWriteUsers} onCreateUser={handleCreateUser} onAssignRoles={handleAssignUserRoles} /> : <Navigate to="/" replace />} />
           <Route path="/roles" element={hasPermission(user, 'roles:read') ? <RolesPanel roles={roles} permissions={permissions} canWrite={canWriteRoles} onSavePermissions={handleSaveRolePermissions} /> : <Navigate to="/" replace />} />
           <Route path="/ipam/vlans" element={hasPermission(user, 'ipam:read') ? <VLansPanel /> : <Navigate to="/" replace />} />
@@ -386,127 +396,6 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
     </AppShell>
-  )
-}
-
-function Overview({ user }: { user: AuthUser }) {
-  const greeting = useMemo(() => user.full_name || user.username || 'Operator', [user])
-
-  type Stats = {
-    auth: { total_users: number; active_users: number; total_roles: number; total_permissions: number; active_tokens: number }
-    ipam: { total_vlans: number; total_subnets: number; assigned_ips: number; total_ips: number }
-    inventory: { total_hosts: number; active_hosts: number; unknown_hosts: number }
-    dns: { total_zones: number; forward_zones: number; total_records: number }
-    dhcp: { total_servers: number; total_pools: number; active_leases: number; total_reservations: number }
-    pki?: { total_cas: number; total_certs: number; active_certs: number; expiring_30d: number }
-    ldap?: { total_servers: number; last_ok: number }
-    health?: { api: string; database: string }
-    audit: { id: number; action: string; resource: string; success: boolean; created_at: string }[]
-  }
-
-  const [stats, setStats] = useState<Stats | null>(null)
-
-  const loadStats = useCallback(() => {
-    apiFetch('/api/v1/dashboard/stats')
-      .then((r) => r.json()).then(setStats).catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    loadStats()
-    const id = setInterval(loadStats, 30000)
-    return () => clearInterval(id)
-  }, [loadStats])
-
-  const moduleCards = [
-    { title: 'Network', to: '/ipam', icon: 'N', desc: 'VLANs, subnets, DNS, and DHCP', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30', badge: 'bg-cyan-500/15 text-cyan-300' },
-    { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, and tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
-    { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
-    { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
-    { title: 'Certificates', to: '/pki', icon: 'P', desc: 'CAs and certificate inventory', stat: stats ? `${stats.pki?.active_certs ?? 0} active · ${stats.pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
-    { title: 'Directory', to: '/ldap', icon: 'L', desc: 'Users, groups, and OUs', stat: stats ? `${stats.ldap?.total_servers ?? 0} directories` : '—', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
-    { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and roles', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
-    { title: 'Settings', to: '/settings', icon: 'S', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—', panel: 'from-slate-700/40 to-slate-800/20 border-slate-700/60', badge: 'bg-slate-700 text-slate-300' },
-  ] as const
-
-  const kpis = stats ? [
-    { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active`, badge: 'bg-emerald-500/15 text-emerald-300' },
-    { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned`, badge: 'bg-cyan-500/15 text-cyan-300' },
-    { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones`, badge: 'bg-indigo-500/15 text-indigo-300' },
-    { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static`, badge: 'bg-amber-500/15 text-amber-300' },
-  ] : []
-
-  return (
-    <section className="space-y-6">
-      {/* hero */}
-      <div className="rounded-[30px] border border-slate-800/80 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">NexusOps · Operations Platform</p>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Welcome, {greeting}</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${stats?.health?.database === 'error' ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
-              <span className={`h-2 w-2 rounded-full ${stats?.health?.database === 'error' ? 'bg-rose-400' : 'animate-pulse bg-emerald-400'}`} />
-              {stats?.health?.database === 'error' ? 'Database unavailable' : stats ? 'API healthy' : 'Checking health…'}
-            </div>
-            <button onClick={loadStats} className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 transition hover:bg-slate-800">⟳ Refresh</button>
-          </div>
-        </div>
-      </div>
-
-      {/* live KPI strip */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {stats === null ? (
-          [0,1,2,3].map((i) => <div key={i} className="h-24 animate-pulse rounded-[24px] border border-slate-800 bg-slate-900/80" />)
-        ) : kpis.map(({ label, value, sub, badge }) => (
-          <div key={label} className="rounded-[24px] border border-slate-800 bg-slate-900/80 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-            <div className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${badge}`}>{label}</div>
-            <div className="mt-4 text-3xl font-bold text-white">{value}</div>
-            <div className="mt-1 text-xs text-slate-400">{sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* module cards + audit feed */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {moduleCards.map(({ title, to, icon, desc, stat, panel, badge }) => (
-            <Link key={title} to={to} className={`rounded-[26px] border bg-gradient-to-br ${panel} p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] transition hover:-translate-y-1`}>
-              <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl ${badge}`}>
-                <span className="text-base font-bold text-white">{icon}</span>
-              </div>
-              <h2 className="text-lg font-semibold text-white">{title}</h2>
-              <p className="mt-1 text-sm text-slate-400">{desc}</p>
-              <p className="mt-3 text-xs font-medium text-slate-300">{stat}</p>
-            </Link>
-          ))}
-        </div>
-
-        {/* audit feed */}
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Recent activity</h3>
-            <Link to="/settings" className="text-[11px] text-slate-400 hover:text-cyan-300">View all →</Link>
-          </div>
-          <div className="space-y-2">
-            {!stats || stats.audit.length === 0 ? (
-              <p className="text-sm text-slate-500">No activity yet.</p>
-            ) : stats.audit.map((log) => (
-              <div key={log.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-white">{log.action}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${log.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
-                    {log.success ? 'ok' : 'fail'}
-                  </span>
-                </div>
-                <div className="mt-0.5 text-[11px] text-slate-400">{log.resource}</div>
-                <div className="mt-1 text-[10px] text-slate-600">{new Date(log.created_at).toLocaleString()}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
   )
 }
 
@@ -551,41 +440,41 @@ function UsersPanel({
     <section className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Access control</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Users</h2>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Access control</p>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Users</h2>
         </div>
-        <div className="rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-300">
+        <div className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-muted">
           {users.length} total accounts
         </div>
       </div>
 
       {canWrite && (
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] md:grid-cols-2">
+      <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-line bg-surface p-5 shadow-card md:grid-cols-2">
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <label className="mb-2 block text-sm font-medium text-ink">Email</label>
+          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-200">Username</label>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <label className="mb-2 block text-sm font-medium text-ink">Username</label>
+          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-200">Full name</label>
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <label className="mb-2 block text-sm font-medium text-ink">Full name</label>
+          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-200">Password</label>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <label className="mb-2 block text-sm font-medium text-ink">Password</label>
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
         </div>
         <div className="md:col-span-2 flex justify-end">
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Create user</button>
+          <button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90">Create user</button>
         </div>
       </form>
       )}
 
-      <div className="overflow-hidden rounded-[26px] border border-slate-800 bg-slate-900/80 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-        <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+        <table className="min-w-full divide-y divide-line text-left text-sm">
+          <thead className="bg-canvas/80 text-muted">
             <tr>
               <th className="px-4 py-3 font-medium">User</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -593,28 +482,28 @@ function UsersPanel({
               <th className="px-4 py-3 font-medium">Created</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-900/60">
+          <tbody className="divide-y divide-line bg-surface/70">
             {users.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-slate-400">No users yet.</td>
+                <td colSpan={4} className="px-4 py-10 text-center text-muted">No users yet.</td>
               </tr>
             ) : (
               users.map((userRecord) => (
-                <tr key={userRecord.id} className="hover:bg-slate-800/50">
+                <tr key={userRecord.id} className="hover:bg-elevated/70">
                   <td className="px-4 py-4">
-                    <div className="font-medium text-white">{userRecord.full_name || userRecord.username}</div>
-                    <div className="text-slate-400">{userRecord.email}</div>
+                    <div className="font-medium text-ink">{userRecord.full_name || userRecord.username}</div>
+                    <div className="text-muted">{userRecord.email}</div>
                   </td>
                   <td className="px-4 py-4">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${userRecord.is_active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${userRecord.is_active ? 'bg-ok/15 text-ok' : 'bg-elevated text-muted'}`}>
                       {userRecord.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-slate-300">
+                  <td className="px-4 py-4 text-muted">
                     <div>{(userRecord.role_names && userRecord.role_names.length > 0) ? userRecord.role_names.join(', ') : (userRecord.is_superuser ? 'Admin' : 'User')}</div>
                     {canWrite && roles.length > 0 && (
                       <select
-                        className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+                        className="mt-2 w-full rounded-xl border border-line bg-canvas px-2 py-1 text-xs text-ink"
                         defaultValue=""
                         onChange={(event) => {
                           const roleId = Number(event.target.value)
@@ -630,7 +519,7 @@ function UsersPanel({
                       </select>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-slate-300">{new Date(userRecord.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-4 text-muted">{new Date(userRecord.created_at).toLocaleDateString()}</td>
                 </tr>
               ))
             )}
@@ -655,28 +544,28 @@ function RolesPanel({
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-violet-300">Role engine</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Roles</h2>
-        <p className="mt-2 text-slate-300">Permission groups configured for the platform.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Role engine</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Roles</h2>
+        <p className="mt-2 text-muted">Permission groups configured for the platform.</p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
         {roles.length === 0 ? (
-          <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-6 text-slate-400 md:col-span-2">No roles returned yet.</div>
+          <div className="rounded-2xl border border-line bg-surface p-6 text-muted md:col-span-2">No roles returned yet.</div>
         ) : (
           roles.map((role) => (
-            <div key={role.id} className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+            <div key={role.id} className="rounded-2xl border border-line bg-surface p-5 shadow-card">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-white">{role.name}</h3>
-                <span className="rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-medium text-violet-300">{role.permissions.length} perms</span>
+                <h3 className="text-xl font-semibold text-ink">{role.name}</h3>
+                <span className="rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent">{role.permissions.length} perms</span>
               </div>
-              {role.description && <p className="mt-2 text-sm leading-6 text-slate-300">{role.description}</p>}
-              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              {role.description && <p className="mt-2 text-sm leading-6 text-muted">{role.description}</p>}
+              <ul className="mt-4 space-y-2 text-sm text-muted">
                 {role.permissions.length === 0 ? (
-                  <li className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-500">No permissions assigned</li>
+                  <li className="rounded-xl border border-line bg-canvas/60 px-3 py-2 text-faint">No permissions assigned</li>
                 ) : (
                   role.permissions.map((permission) => (
-                    <li key={permission.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200">
+                    <li key={permission.id} className="rounded-xl border border-line bg-canvas/60 px-3 py-2 text-ink">
                       {permission.name}
                     </li>
                   ))
@@ -687,7 +576,7 @@ function RolesPanel({
                   {permissions.map((permission) => {
                     const checked = role.permissions.some((item) => item.id === permission.id)
                     return (
-                      <label key={permission.id} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-300">
+                      <label key={permission.id} className="flex items-center gap-2 rounded-xl border border-line bg-canvas/60 px-3 py-2 text-xs text-muted">
                         <input
                           type="checkbox"
                           checked={checked}
@@ -780,107 +669,107 @@ function SettingsPanel({
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">Security & controls</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Settings & access</h2>
-        <p className="mt-2 text-slate-300">Platform defaults, audit review, and API token management.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Security & controls</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Settings & access</h2>
+        <p className="mt-2 text-muted">Platform defaults, audit review, and API token management.</p>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold text-white">Update setting</h3>
-            <span className="rounded-full bg-cyan-500/15 px-2 py-1 text-xs font-medium text-cyan-300">Live</span>
+            <h3 className="text-xl font-semibold text-ink">Update setting</h3>
+            <span className="rounded-full bg-accent/15 px-2 py-1 text-xs font-medium text-accent">Live</span>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Key</label>
-            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            <label className="mb-2 block text-sm font-medium text-ink">Key</label>
+            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Value</label>
-            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            <label className="mb-2 block text-sm font-medium text-ink">Value</label>
+            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Description</label>
-            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            <label className="mb-2 block text-sm font-medium text-ink">Description</label>
+            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
           </div>
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Save setting</button>
+          <button type="submit" className="rounded-2xl bg-accent px-4 py-2.5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90">Save setting</button>
         </form>
 
-        <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold text-white">Create API token</h3>
-            <span className="rounded-full bg-violet-500/15 px-2 py-1 text-xs font-medium text-violet-300">Token</span>
+            <h3 className="text-xl font-semibold text-ink">Create API token</h3>
+            <span className="rounded-full bg-accent/15 px-2 py-1 text-xs font-medium text-accent">Token</span>
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Token name</label>
-            <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20" />
+            <label className="mb-2 block text-sm font-medium text-ink">Token name</label>
+            <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
           </div>
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Expires in days</label>
-            <input type="number" min={1} max={3650} value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value) || 30)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20" />
+            <label className="mb-2 block text-sm font-medium text-ink">Expires in days</label>
+            <input type="number" min={1} max={3650} value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value) || 30)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
           </div>
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 px-4 py-2.5 font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:brightness-110">Generate token</button>
+          <button type="submit" className="rounded-2xl bg-accent px-4 py-2.5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90">Generate token</button>
           {newToken && (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200 break-all shadow-inner shadow-emerald-500/10">
+            <div className="rounded-2xl border border-ok/30 bg-ok/10 p-3 text-sm text-ok break-all">
               {newToken}
             </div>
           )}
         </form>
 
-        <form onSubmit={handlePasswordSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] xl:col-span-2">
-          <h3 className="text-xl font-semibold text-white">Change password</h3>
+        <form onSubmit={handlePasswordSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card xl:col-span-2">
+          <h3 className="text-xl font-semibold text-ink">Change password</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label htmlFor="current-password" className="mb-2 block text-sm font-medium text-slate-200">Current password</label>
-              <input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+              <label htmlFor="current-password" className="mb-2 block text-sm font-medium text-ink">Current password</label>
+              <input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
             </div>
             <div>
-              <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-slate-200">New password</label>
-              <input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+              <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-ink">New password</label>
+              <input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
             </div>
           </div>
-          <button type="submit" className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 font-semibold text-slate-100 transition hover:bg-slate-800">Update password</button>
-          {passwordMessage && <p className="text-sm text-slate-300">{passwordMessage}</p>}
+          <button type="submit" className="rounded-2xl border border-line bg-canvas px-4 py-2.5 font-semibold text-ink transition hover:bg-elevated">Update password</button>
+          {passwordMessage && <p className="text-sm text-muted">{passwordMessage}</p>}
         </form>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-          <h3 className="text-xl font-semibold text-white">Current settings</h3>
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+          <h3 className="text-xl font-semibold text-ink">Current settings</h3>
           <div className="mt-4 space-y-3">
             {Object.keys(settings).length === 0 ? (
-              <p className="text-slate-400">No settings available.</p>
+              <p className="text-muted">No settings available.</p>
             ) : (
               Object.entries(settings).map(([keyName, valueName]) => (
-                <div key={keyName} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-cyan-300">{keyName}</div>
-                  <div className="mt-2 break-all text-sm text-slate-100">{valueName}</div>
+                <div key={keyName} className="rounded-2xl border border-line bg-canvas/60 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-accent">{keyName}</div>
+                  <div className="mt-2 break-all text-sm text-ink">{valueName}</div>
                 </div>
               ))
             )}
           </div>
         </div>
 
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-          <h3 className="text-xl font-semibold text-white">API tokens</h3>
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+          <h3 className="text-xl font-semibold text-ink">API tokens</h3>
           <div className="mt-4 space-y-3">
             {apiTokens.length === 0 ? (
-              <p className="text-slate-400">No API tokens created yet.</p>
+              <p className="text-muted">No API tokens created yet.</p>
             ) : (
               apiTokens.map((token) => (
-                <div key={token.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <div key={token.id} className="rounded-2xl border border-line bg-canvas/60 p-3">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium text-white">{token.name}</span>
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${token.is_active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
+                    <span className="font-medium text-ink">{token.name}</span>
+                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${token.is_active ? 'bg-ok/15 text-ok' : 'bg-elevated text-muted'}`}>
                       {token.is_active ? 'Active' : 'Disabled'}
                     </span>
                   </div>
-                  <div className="mt-2 text-xs text-slate-400">Prefix: {token.prefix}</div>
-                  <div className="text-xs text-slate-400">Created: {new Date(token.created_at).toLocaleDateString()}</div>
+                  <div className="mt-2 text-xs text-muted">Prefix: {token.prefix}</div>
+                  <div className="text-xs text-muted">Created: {new Date(token.created_at).toLocaleDateString()}</div>
                   {token.is_active && (
                     <button
                       type="button"
-                      className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200"
+                      className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger"
                       onClick={() => void onRevokeToken(token.id)}
                     >
                       Revoke
@@ -893,23 +782,23 @@ function SettingsPanel({
         </div>
       </div>
 
-      <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-        <h3 className="text-xl font-semibold text-white">Audit log</h3>
+      <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+        <h3 className="text-xl font-semibold text-ink">Audit log</h3>
         <div className="mt-4 space-y-3">
           {auditLogs.length === 0 ? (
-            <p className="text-slate-400">No audit events yet.</p>
+            <p className="text-muted">No audit events yet.</p>
           ) : (
             auditLogs.slice(0, 10).map((log) => (
-              <div key={log.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm">
+              <div key={log.id} className="rounded-2xl border border-line bg-canvas/60 p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-white">{log.action}</span>
-                  <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${log.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                  <span className="font-medium text-ink">{log.action}</span>
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${log.success ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>
                     {log.success ? 'Success' : 'Failed'}
                   </span>
                 </div>
-                <div className="mt-2 text-slate-300">{log.resource}</div>
-                <div className="mt-1 text-slate-400">{log.details || 'No details provided'}</div>
-                <div className="mt-2 text-[11px] text-slate-500">{new Date(log.created_at).toLocaleString()}</div>
+                <div className="mt-2 text-muted">{log.resource}</div>
+                <div className="mt-1 text-muted">{log.details || 'No details provided'}</div>
+                <div className="mt-2 text-[11px] text-faint">{new Date(log.created_at).toLocaleString()}</div>
               </div>
             ))
           )}
@@ -918,5 +807,3 @@ function SettingsPanel({
     </section>
   )
 }
-
-export default App

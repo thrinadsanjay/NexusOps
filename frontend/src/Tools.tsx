@@ -26,7 +26,7 @@ const BUNDLED_TOOLS: Tool[] = [
     category: 'Identity',
     icon: 'L',
     badge: 'Built-in',
-    badgeColor: 'bg-sky-500/15 text-sky-300',
+    badgeColor: 'bg-accent/15 text-accent',
     external: false,
   },
   {
@@ -37,7 +37,7 @@ const BUNDLED_TOOLS: Tool[] = [
     category: 'Developer',
     icon: 'D',
     badge: 'Built-in',
-    badgeColor: 'bg-violet-500/15 text-violet-300',
+    badgeColor: 'bg-accent/15 text-accent',
     external: true,
   },
   {
@@ -48,17 +48,17 @@ const BUNDLED_TOOLS: Tool[] = [
     category: 'Developer',
     icon: 'R',
     badge: 'Built-in',
-    badgeColor: 'bg-violet-500/15 text-violet-300',
+    badgeColor: 'bg-accent/15 text-accent',
     external: true,
   },
 ]
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Identity:  'bg-sky-500/15 text-sky-300 border-sky-500/30',
-  Developer: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
-  Network:   'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
-  Security:  'bg-rose-500/15 text-rose-300 border-rose-500/30',
-  Monitoring:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  Identity:  'bg-accent/15 text-accent border-accent/30',
+  Developer: 'bg-accent/15 text-accent border-accent/30',
+  Network:   'bg-accent/15 text-accent border-accent/30',
+  Security:  'bg-danger/15 text-danger border-danger/30',
+  Monitoring:'bg-ok/15 text-ok border-ok/30',
 }
 
 type LdapServer = { id: number; name: string; host: string; port: number; last_test_status: string | null }
@@ -88,37 +88,37 @@ export function ToolsPanel() {
   return (
     <section className="space-y-8">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">NexusOps · Integrations</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Tools & Integrations</h2>
-        <p className="mt-2 text-slate-300">All bundled services and external tools accessible from one place.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">NexusOps · Integrations</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Tools & Integrations</h2>
+        <p className="mt-2 text-muted">All bundled services and external tools accessible from one place.</p>
       </div>
 
       {ldapServers.length > 0 && (
         <div>
-          <h3 className="mb-4 text-sm font-semibold text-slate-300 uppercase tracking-[0.15em]">Connected LDAP Directories</h3>
+          <h3 className="mb-4 text-sm font-semibold text-muted uppercase tracking-[0.15em]">Connected LDAP Directories</h3>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {ldapServers.map((svr) => {
               const testRes = testResults[svr.name]
               const status = testRes ? (testRes === 'ok' ? 'ok' : 'error') : svr.last_test_status
               return (
-                <div key={svr.id} className="rounded-[24px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+                <div key={svr.id} className="rounded-2xl border border-line bg-surface p-5 shadow-card">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-semibold text-white">{svr.name}</div>
-                      <div className="mt-0.5 font-mono text-[11px] text-slate-400">{svr.host}:{svr.port}</div>
+                      <div className="font-semibold text-ink">{svr.name}</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-muted">{svr.host}:{svr.port}</div>
                     </div>
                     {status && (
-                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${status === 'ok' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/15 text-rose-300 border-rose-500/30'}`}>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium ${status === 'ok' ? 'bg-ok/15 text-ok border-ok/30' : 'bg-danger/15 text-danger border-danger/30'}`}>
                         {status === 'ok' ? '✓ Online' : '✗ Error'}
                       </span>
                     )}
                   </div>
-                  {testRes && testRes !== 'ok' && <p className="mt-2 rounded-xl bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">{testRes}</p>}
+                  {testRes && testRes !== 'ok' && <p className="mt-2 rounded-xl bg-danger/10 px-2 py-1 text-[11px] text-danger">{testRes}</p>}
                   <div className="mt-4 flex gap-2">
-                    <button onClick={() => handleTestLdap(svr.id, svr.name)} disabled={testing === svr.name} className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
+                    <button onClick={() => handleTestLdap(svr.id, svr.name)} disabled={testing === svr.name} className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60">
                       {testing === svr.name ? '⟳ Testing…' : '⟳ Test'}
                     </button>
-                    <Link to="/ldap" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800">
+                    <Link to="/ldap" className="rounded-xl border border-line bg-canvas px-3 py-1.5 text-xs text-muted transition hover:bg-elevated">
                       Open directory →
                     </Link>
                   </div>
@@ -132,25 +132,25 @@ export function ToolsPanel() {
       {categories.map((cat) => (
         <div key={cat}>
           <div className="mb-4 flex items-center gap-3">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-[0.15em]">{cat}</h3>
-            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${CATEGORY_COLORS[cat] ?? 'bg-slate-700 text-slate-400'}`}>{cat}</span>
+            <h3 className="text-sm font-semibold text-muted uppercase tracking-[0.15em]">{cat}</h3>
+            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${CATEGORY_COLORS[cat] ?? 'bg-elevated text-muted'}`}>{cat}</span>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {BUNDLED_TOOLS.filter((t) => t.category === cat).map((tool) => {
-              const className = 'group rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] transition hover:-translate-y-1 hover:border-slate-700'
+              const className = 'group rounded-2xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-1 hover:border-accent/40'
               const body = (
                 <>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-base font-bold text-white transition group-hover:bg-slate-700">
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-elevated text-base font-bold text-ink transition group-hover:bg-elevated">
                       {tool.icon}
                     </div>
                     {tool.badge && (
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${tool.badgeColor ?? 'bg-slate-700 text-slate-300'}`}>{tool.badge}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${tool.badgeColor ?? 'bg-elevated text-muted'}`}>{tool.badge}</span>
                     )}
                   </div>
-                  <h4 className="mt-3 text-base font-semibold text-white">{tool.name}</h4>
-                  <p className="mt-1 text-sm text-slate-400">{tool.description}</p>
-                  <div className="mt-4 flex items-center gap-1 text-[11px] text-slate-500 transition group-hover:text-cyan-400">
+                  <h4 className="mt-3 text-base font-semibold text-ink">{tool.name}</h4>
+                  <p className="mt-1 text-sm text-muted">{tool.description}</p>
+                  <div className="mt-4 flex items-center gap-1 text-[11px] text-faint transition group-hover:text-accent">
                     <span className="font-mono">{tool.url}</span>
                     <span>↗</span>
                   </div>
@@ -166,10 +166,10 @@ export function ToolsPanel() {
         </div>
       ))}
 
-      <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5">
-        <h3 className="mb-2 text-sm font-semibold text-white">Bundled directory accounts</h3>
-        <p className="text-sm text-slate-400">
-          Default LDAP users are documented in the repository README and <span className="text-cyan-300">.env.example</span>.
+      <div className="rounded-2xl border border-line bg-surface p-5">
+        <h3 className="mb-2 text-sm font-semibold text-ink">Bundled directory accounts</h3>
+        <p className="text-sm text-muted">
+          Default LDAP users are documented in the repository README and <span className="text-accent">.env.example</span>.
           Manage them from the Directory Manager. Change all bundled passwords before any networked deployment.
         </p>
       </div>

@@ -14,30 +14,30 @@ export type DiscoveredNetwork = { cidr: string; interface: string }
 // ── shared helpers ──────────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<string, string> = {
-  active: 'bg-emerald-500/15 text-emerald-300',
-  reserved: 'bg-amber-500/15 text-amber-300',
-  deprecated: 'bg-slate-700 text-slate-400',
-  available: 'bg-cyan-500/15 text-cyan-300',
-  assigned: 'bg-violet-500/15 text-violet-300',
+  active: 'bg-ok/15 text-ok',
+  reserved: 'bg-warn/15 text-warn',
+  deprecated: 'bg-elevated text-muted',
+  available: 'bg-accent/15 text-accent',
+  assigned: 'bg-accent/15 text-accent',
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_BADGE[status] ?? 'bg-slate-700 text-slate-300'}`}>{status}</span>
+  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_BADGE[status] ?? 'bg-elevated text-muted'}`}>{status}</span>
 }
 
 function UtilBar({ util }: { util: SubnetUtil }) {
   const pct = Math.min(util.percent_used, 100)
-  const color = pct > 85 ? 'bg-rose-500' : pct > 60 ? 'bg-amber-400' : 'bg-emerald-400'
+  const color = pct > 85 ? 'bg-danger' : pct > 60 ? 'bg-warn' : 'bg-ok'
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[11px] text-slate-300">
+      <div className="flex items-center justify-between text-[11px] text-muted">
         <span>{util.used} used / {util.total} total</span>
-        <span className="font-semibold text-white">{pct}%</span>
+        <span className="font-semibold text-ink">{pct}%</span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-elevated">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="text-[11px] text-cyan-400">{util.available} available</div>
+      <div className="text-[11px] text-accent">{util.available} available</div>
     </div>
   )
 }
@@ -164,54 +164,54 @@ export function NetworkOverview() {
     <section className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Network / IPAM</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Network overview</h2>
-          <p className="mt-2 text-slate-300">Add your LAN subnets, scan them to discover live hosts, and track IP utilization.</p>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Network / IPAM</p>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Network overview</h2>
+          <p className="mt-2 text-muted">Add your LAN subnets, scan them to discover live hosts, and track IP utilization.</p>
         </div>
-        <button onClick={handleDiscover} disabled={discovering} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-4 text-sm font-medium text-slate-300 transition hover:bg-slate-800 disabled:opacity-60">
+        <button onClick={handleDiscover} disabled={discovering} className="inline-flex h-10 items-center gap-2 rounded-2xl border border-line bg-surface px-4 text-sm font-medium text-muted transition hover:bg-elevated disabled:opacity-60">
           {discovering ? '⟳ Scanning for networks…' : '⟳ Re-detect networks'}
         </button>
       </div>
 
       {/* Quick add + scan */}
-      <form onSubmit={handleQuickAdd} className="rounded-[26px] border border-cyan-500/25 bg-gradient-to-br from-cyan-500/10 to-slate-900 p-5">
+      <form onSubmit={handleQuickAdd} className="rounded-2xl border border-accent/25 bg-accent-soft p-5">
         <div className="mb-4">
-          <p className="text-sm font-semibold text-white">Add LAN subnet &amp; scan</p>
-          <p className="mt-1 text-[12px] text-slate-400">Enter any subnet from your homelab. NexusOps will register it and immediately run a host discovery scan.</p>
+          <p className="text-sm font-semibold text-ink">Add LAN subnet &amp; scan</p>
+          <p className="mt-1 text-[12px] text-muted">Enter any subnet from your homelab. NexusOps will register it and immediately run a host discovery scan.</p>
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[160px]">
-            <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-slate-400">CIDR</label>
-            <input value={quickCidr} onChange={(e) => setQuickCidr(e.target.value)} required placeholder="192.168.1.0/24" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" />
+            <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-muted">CIDR</label>
+            <input value={quickCidr} onChange={(e) => setQuickCidr(e.target.value)} required placeholder="192.168.1.0/24" className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" />
           </div>
           <div className="flex-1 min-w-[140px]">
-            <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-slate-400">Name (optional)</label>
-            <input value={quickName} onChange={(e) => setQuickName(e.target.value)} placeholder="Home LAN" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" />
+            <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-muted">Name (optional)</label>
+            <input value={quickName} onChange={(e) => setQuickName(e.target.value)} placeholder="Home LAN" className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" />
           </div>
           <div className="flex-1 min-w-[140px]">
-            <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-slate-400">Gateway (optional)</label>
-            <input value={quickGateway} onChange={(e) => setQuickGateway(e.target.value)} placeholder="192.168.1.1" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" />
+            <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-muted">Gateway (optional)</label>
+            <input value={quickGateway} onChange={(e) => setQuickGateway(e.target.value)} placeholder="192.168.1.1" className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" />
           </div>
-          <button type="submit" disabled={quickAdding} className="h-[46px] rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110 disabled:opacity-60">
+          <button type="submit" disabled={quickAdding} className="h-[46px] rounded-2xl bg-accent px-5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90 disabled:opacity-60">
             {quickAdding ? 'Adding…' : '+ Add & Scan'}
           </button>
         </div>
-        {quickError && <p className="mt-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{quickError}</p>}
+        {quickError && <p className="mt-3 rounded-2xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{quickError}</p>}
       </form>
 
       {/* Discovered networks panel */}
       {discovered.length > 0 && (
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+        <div className="rounded-2xl border border-line bg-surface p-5 space-y-4">
           {configuredNets.length > 0 && (
             <div>
-              <p className="mb-3 text-sm font-semibold text-emerald-300">Auto-detected LAN networks (reachable via gateway probe)</p>
-              <p className="mb-3 text-[11px] text-slate-400">These subnets responded during gateway probing. Click any one to register it and start a host discovery scan.</p>
+              <p className="mb-3 text-sm font-semibold text-ok">Auto-detected LAN networks (reachable via gateway probe)</p>
+              <p className="mb-3 text-[11px] text-muted">These subnets responded during gateway probing. Click any one to register it and start a host discovery scan.</p>
               <div className="flex flex-wrap gap-3">
                 {configuredNets.map((n) => (
                   <form key={n.cidr} onSubmit={(e) => handleQuickAdd(e, n.cidr)}>
-                    <button type="submit" className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-slate-950/60 px-3 py-2 text-sm transition hover:border-cyan-400">
-                      <span className="font-mono font-semibold text-white">{n.cidr}</span>
-                      <span className="text-[11px] text-slate-400">click to add &amp; scan →</span>
+                    <button type="submit" className="flex items-center gap-2 rounded-xl border border-ok/30 bg-canvas/60 px-3 py-2 text-sm transition hover:border-accent">
+                      <span className="font-mono font-semibold text-ink">{n.cidr}</span>
+                      <span className="text-[11px] text-muted">click to add &amp; scan →</span>
                     </button>
                   </form>
                 ))}
@@ -220,16 +220,16 @@ export function NetworkOverview() {
           )}
           {containerNets.length > 0 && (
             <div>
-              <p className="mb-3 text-sm font-semibold text-slate-400">Container interfaces (Docker bridge — not your LAN)</p>
+              <p className="mb-3 text-sm font-semibold text-muted">Container interfaces (Docker bridge — not your LAN)</p>
               <div className="flex flex-wrap gap-3">
                 {containerNets.map((n) => (
-                  <div key={n.cidr} className="flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-950/40 px-3 py-2 text-sm">
-                    <span className="font-mono font-semibold text-slate-400">{n.cidr}</span>
-                    <span className="text-slate-500">{n.interface}</span>
+                  <div key={n.cidr} className="flex items-center gap-2 rounded-xl border border-line bg-canvas/40 px-3 py-2 text-sm">
+                    <span className="font-mono font-semibold text-muted">{n.cidr}</span>
+                    <span className="text-faint">{n.interface}</span>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[11px] text-slate-500">To always show specific subnets here, add <code className="rounded bg-slate-800 px-1 py-0.5 text-cyan-300">SCAN_NETWORKS=192.168.1.0/24</code> to your <code className="rounded bg-slate-800 px-1 py-0.5 text-cyan-300">.env</code> and restart.</p>
+              <p className="mt-3 text-[11px] text-faint">To always show specific subnets here, add <code className="rounded bg-elevated px-1 py-0.5 text-accent">SCAN_NETWORKS=192.168.1.0/24</code> to your <code className="rounded bg-elevated px-1 py-0.5 text-accent">.env</code> and restart.</p>
             </div>
           )}
         </div>
@@ -237,7 +237,7 @@ export function NetworkOverview() {
 
       {/* Subnet utilization cards */}
       {subnets.length === 0 ? (
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-10 text-center text-slate-400">
+        <div className="rounded-2xl border border-line bg-surface p-10 text-center text-muted">
           No subnets yet. Use the form above to add your first LAN subnet.
         </div>
       ) : (
@@ -246,23 +246,23 @@ export function NetworkOverview() {
             const u = utils[s.id]
             const sc = scanStates[s.id]
             return (
-              <div key={s.id} className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+              <div key={s.id} className="rounded-2xl border border-line bg-surface p-5 shadow-card">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-mono text-lg font-bold text-white">{s.cidr}</div>
-                    <div className="mt-0.5 text-sm text-slate-300">{s.name}</div>
-                    {s.gateway && <div className="mt-1 font-mono text-[11px] text-slate-400">GW {s.gateway}</div>}
+                    <div className="font-mono text-lg font-bold text-ink">{s.cidr}</div>
+                    <div className="mt-0.5 text-sm text-muted">{s.name}</div>
+                    {s.gateway && <div className="mt-1 font-mono text-[11px] text-muted">GW {s.gateway}</div>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <StatusBadge status={s.status} />
-                    <button onClick={() => handleScan(s.id)} disabled={sc === 'scanning'} className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-medium text-cyan-300 transition hover:bg-cyan-500/20 disabled:opacity-60">
+                    <button onClick={() => handleScan(s.id)} disabled={sc === 'scanning'} className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-1.5 text-[11px] font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60">
                       {sc === 'scanning' ? '⟳ Scanning…' : '⟳ Scan'}
                     </button>
                   </div>
                 </div>
-                <div className="mt-4">{u ? <UtilBar util={u} /> : <div className="h-2 w-full animate-pulse rounded-full bg-slate-800" />}</div>
+                <div className="mt-4">{u ? <UtilBar util={u} /> : <div className="h-2 w-full animate-pulse rounded-full bg-elevated" />}</div>
                 {sc && sc !== 'scanning' && (
-                  <p className={`mt-3 rounded-xl px-3 py-2 text-[11px] ${sc.startsWith('done') ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>{sc}</p>
+                  <p className={`mt-3 rounded-xl px-3 py-2 text-[11px] ${sc.startsWith('done') ? 'bg-ok/10 text-ok' : 'bg-danger/10 text-danger'}`}>{sc}</p>
                 )}
               </div>
             )
@@ -305,29 +305,29 @@ export function VLansPanel() {
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Network / IPAM</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">VLANs</h2>
-        <p className="mt-2 text-slate-300">802.1Q VLAN registry for your network segments.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Network / IPAM</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">VLANs</h2>
+        <p className="mt-2 text-muted">802.1Q VLAN registry for your network segments.</p>
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 md:grid-cols-3">
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">VLAN ID (1–4094)</label><input type="number" min={1} max={4094} value={vid} onChange={(e) => setVid(e.target.value)} required className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Name</label><input value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        {error && <p className="md:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-        <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:brightness-110">Add VLAN</button></div>
+      <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-line bg-surface p-5 md:grid-cols-3">
+        <div><label className="mb-2 block text-sm font-medium text-ink">VLAN ID (1–4094)</label><input type="number" min={1} max={4094} value={vid} onChange={(e) => setVid(e.target.value)} required className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Name</label><input value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        {error && <p className="md:col-span-3 rounded-2xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+        <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:opacity-90">Add VLAN</button></div>
       </form>
-      <div className="overflow-hidden rounded-[26px] border border-slate-800 bg-slate-900/80">
-        <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-4 py-3 font-medium">VID</th><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">Description</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr></thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-900/60">
-            {vlans.length === 0 ? <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-400">No VLANs defined yet.</td></tr>
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+        <table className="min-w-full divide-y divide-line text-left text-sm">
+          <thead className="bg-canvas/80 text-muted"><tr><th className="px-4 py-3 font-medium">VID</th><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">Description</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr></thead>
+          <tbody className="divide-y divide-line bg-surface/70">
+            {vlans.length === 0 ? <tr><td colSpan={5} className="px-4 py-10 text-center text-muted">No VLANs defined yet.</td></tr>
               : vlans.map((v) => (
-                <tr key={v.id} className="hover:bg-slate-800/50">
-                  <td className="px-4 py-4 font-mono font-semibold text-white">{v.vid}</td>
-                  <td className="px-4 py-4 text-white">{v.name}</td>
-                  <td className="px-4 py-4 text-slate-300">{v.description ?? '—'}</td>
+                <tr key={v.id} className="hover:bg-elevated/70">
+                  <td className="px-4 py-4 font-mono font-semibold text-ink">{v.vid}</td>
+                  <td className="px-4 py-4 text-ink">{v.name}</td>
+                  <td className="px-4 py-4 text-muted">{v.description ?? '—'}</td>
                   <td className="px-4 py-4"><StatusBadge status={v.status} /></td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(v.id, v.name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(v.id, v.name)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger hover:bg-danger/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>
@@ -387,35 +387,35 @@ export function SubnetsPanel() {
   return (
     <section className="space-y-6">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Network / IPAM</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Subnets</h2>
-        <p className="mt-2 text-slate-300">Add your LAN prefixes here. After adding a subnet, head to Network Overview to scan it.</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Network / IPAM</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Subnets</h2>
+        <p className="mt-2 text-muted">Add your LAN prefixes here. After adding a subnet, head to Network Overview to scan it.</p>
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 md:grid-cols-2 xl:grid-cols-3">
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">CIDR (e.g. 192.168.10.0/24)</label><input value={cidr} onChange={(e) => setCidr(e.target.value)} required className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Name</label><input value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Gateway</label><input value={gateway} onChange={(e) => setGateway(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">VLAN</label><select value={vlanId} onChange={(e) => setVlanId(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400"><option value="">— none —</option>{vlans.map((v) => <option key={v.id} value={v.id}>VLAN {v.vid} – {v.name}</option>)}</select></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-        <div className="md:col-span-2 xl:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:brightness-110">Add subnet</button></div>
+      <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-line bg-surface p-5 md:grid-cols-2 xl:grid-cols-3">
+        <div><label className="mb-2 block text-sm font-medium text-ink">CIDR (e.g. 192.168.10.0/24)</label><input value={cidr} onChange={(e) => setCidr(e.target.value)} required className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Name</label><input value={name} onChange={(e) => setName(e.target.value)} required className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Gateway</label><input value={gateway} onChange={(e) => setGateway(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">VLAN</label><select value={vlanId} onChange={(e) => setVlanId(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent"><option value="">— none —</option>{vlans.map((v) => <option key={v.id} value={v.id}>VLAN {v.vid} – {v.name}</option>)}</select></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+        <div className="md:col-span-2 xl:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:opacity-90">Add subnet</button></div>
       </form>
-      <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80">
-        <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="min-w-full divide-y divide-line text-left text-sm">
+          <thead className="bg-canvas/80 text-muted">
             <tr><th className="px-4 py-3 font-medium">CIDR</th><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">Gateway</th><th className="px-4 py-3 font-medium">VLAN</th><th className="px-4 py-3 font-medium min-w-[200px]">Utilization</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-900/60">
-            {subnets.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No subnets defined yet.</td></tr>
+          <tbody className="divide-y divide-line bg-surface/70">
+            {subnets.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-muted">No subnets defined yet.</td></tr>
               : subnets.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-800/50">
-                  <td className="px-4 py-4 font-mono font-semibold text-white">{s.cidr}</td>
-                  <td className="px-4 py-4 text-white">{s.name}</td>
-                  <td className="px-4 py-4 font-mono text-slate-300">{s.gateway ?? '—'}</td>
-                  <td className="px-4 py-4 text-slate-300">{vlanLabel(s.vlan_id)}</td>
-                  <td className="px-4 py-4 min-w-[200px]">{utils[s.id] ? <UtilBar util={utils[s.id]} /> : <div className="h-2 w-full animate-pulse rounded-full bg-slate-800" />}</td>
+                <tr key={s.id} className="hover:bg-elevated/70">
+                  <td className="px-4 py-4 font-mono font-semibold text-ink">{s.cidr}</td>
+                  <td className="px-4 py-4 text-ink">{s.name}</td>
+                  <td className="px-4 py-4 font-mono text-muted">{s.gateway ?? '—'}</td>
+                  <td className="px-4 py-4 text-muted">{vlanLabel(s.vlan_id)}</td>
+                  <td className="px-4 py-4 min-w-[200px]">{utils[s.id] ? <UtilBar util={utils[s.id]} /> : <div className="h-2 w-full animate-pulse rounded-full bg-elevated" />}</td>
                   <td className="px-4 py-4"><StatusBadge status={s.status} /></td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(s.id, s.name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(s.id, s.name)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger hover:bg-danger/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>
@@ -469,38 +469,38 @@ export function IPAddressesPanel() {
     <section className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Network / IPAM</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">IP Addresses</h2>
-          <p className="mt-2 text-slate-300">Host assignments, reservations, and scan-discovered hosts.</p>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Network / IPAM</p>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">IP Addresses</h2>
+          <p className="mt-2 text-muted">Host assignments, reservations, and scan-discovered hosts.</p>
         </div>
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by IP or hostname…" className="w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400 md:w-auto" />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by IP or hostname…" className="w-full max-w-xs rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent md:w-auto" />
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 md:grid-cols-2 xl:grid-cols-3">
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">IP Address</label><input value={address} onChange={(e) => setAddress(e.target.value)} required className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Subnet</label><select value={subnetId} onChange={(e) => setSubnetId(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400"><option value="">— none —</option>{subnets.map((s) => <option key={s.id} value={s.id}>{s.cidr} – {s.name}</option>)}</select></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Hostname</label><input value={hostname} onChange={(e) => setHostname(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">DNS name</label><input value={dnsName} onChange={(e) => setDnsName(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">MAC address</label><input value={mac} onChange={(e) => setMac(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" /></div>
-        {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-        <div className="md:col-span-2 xl:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:brightness-110">Add address</button></div>
+      <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-line bg-surface p-5 md:grid-cols-2 xl:grid-cols-3">
+        <div><label className="mb-2 block text-sm font-medium text-ink">IP Address</label><input value={address} onChange={(e) => setAddress(e.target.value)} required className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Subnet</label><select value={subnetId} onChange={(e) => setSubnetId(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent"><option value="">— none —</option>{subnets.map((s) => <option key={s.id} value={s.id}>{s.cidr} – {s.name}</option>)}</select></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Hostname</label><input value={hostname} onChange={(e) => setHostname(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">DNS name</label><input value={dnsName} onChange={(e) => setDnsName(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">MAC address</label><input value={mac} onChange={(e) => setMac(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 font-mono text-ink outline-none focus:border-accent" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-ink">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none focus:border-accent" /></div>
+        {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+        <div className="md:col-span-2 xl:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:opacity-90">Add address</button></div>
       </form>
-      <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80">
-        <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+        <table className="min-w-full divide-y divide-line text-left text-sm">
+          <thead className="bg-canvas/80 text-muted">
             <tr><th className="px-4 py-3 font-medium">Address</th><th className="px-4 py-3 font-medium">Hostname</th><th className="px-4 py-3 font-medium">Subnet</th><th className="px-4 py-3 font-medium">MAC</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Last seen</th><th className="px-4 py-3" /></tr>
           </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-900/60">
-            {filtered.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No IP addresses registered yet. Add subnets and scan them to populate this list.</td></tr>
+          <tbody className="divide-y divide-line bg-surface/70">
+            {filtered.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-muted">No IP addresses registered yet. Add subnets and scan them to populate this list.</td></tr>
               : filtered.map((ip) => (
-                <tr key={ip.id} className="hover:bg-slate-800/50">
-                  <td className="px-4 py-4 font-mono font-semibold text-white">{ip.address}</td>
-                  <td className="px-4 py-4 text-slate-200">{ip.hostname ?? '—'}</td>
-                  <td className="px-4 py-4 font-mono text-slate-300">{subnetLabel(ip.subnet_id)}</td>
-                  <td className="px-4 py-4 font-mono text-slate-300">{ip.mac_address ?? '—'}</td>
+                <tr key={ip.id} className="hover:bg-elevated/70">
+                  <td className="px-4 py-4 font-mono font-semibold text-ink">{ip.address}</td>
+                  <td className="px-4 py-4 text-ink">{ip.hostname ?? '—'}</td>
+                  <td className="px-4 py-4 font-mono text-muted">{subnetLabel(ip.subnet_id)}</td>
+                  <td className="px-4 py-4 font-mono text-muted">{ip.mac_address ?? '—'}</td>
                   <td className="px-4 py-4"><StatusBadge status={ip.status} /></td>
-                  <td className="px-4 py-4 text-slate-400">{ip.last_seen_at ? new Date(ip.last_seen_at).toLocaleString() : '—'}</td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(ip.id, ip.address)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-muted">{ip.last_seen_at ? new Date(ip.last_seen_at).toLocaleString() : '—'}</td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(ip.id, ip.address)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger hover:bg-danger/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>

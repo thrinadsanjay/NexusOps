@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 
+import { ThemeToggle } from '../theme'
 import { SiteFooter } from './SiteFooter'
 import { NAV_GROUPS, isPathActive, type NavGroup, type NavLinkItem } from './navigation'
 
@@ -71,19 +72,23 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
   const roleLabel = user.role_names?.[0] || (user.username === 'admin' ? 'admin' : 'operator')
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100">
+    <div className="flex min-h-screen flex-col bg-canvas text-ink">
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
-      <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-line bg-surface/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400" aria-label="NexusOps home">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-cyan-400 text-sm font-black text-slate-950" aria-hidden="true">
+          <Link
+            to="/"
+            className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            aria-label="NexusOps home"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-accent text-sm font-black text-accent-fg" aria-hidden="true">
               N
             </span>
             <span className="leading-tight">
-              <span className="block text-sm font-semibold text-white">NexusOps</span>
-              <span className="block text-[11px] text-slate-400">Control plane</span>
+              <span className="block text-sm font-semibold text-ink">NexusOps</span>
+              <span className="block text-[11px] text-muted">Control plane</span>
             </span>
           </Link>
 
@@ -96,8 +101,10 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
                       to={group.items[0].to}
                       aria-current={itemIsActive(location.pathname, group.items[0], group.items) ? 'page' : undefined}
                       className={() =>
-                        `rounded-md px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 ${
-                          itemIsActive(location.pathname, group.items[0], group.items) ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                        `rounded-md px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                          itemIsActive(location.pathname, group.items[0], group.items)
+                            ? 'bg-accent-soft text-accent'
+                            : 'text-muted hover:bg-elevated hover:text-ink'
                         }`
                       }
                     >
@@ -118,23 +125,24 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
-            <p className="hidden text-right text-xs leading-4 text-slate-400 sm:block">
-              <span className="block font-medium text-slate-200">{displayName}</span>
+            <ThemeToggle compact />
+            <p className="hidden text-right text-xs leading-4 text-muted sm:block">
+              <span className="block font-medium text-ink">{displayName}</span>
               <span className="capitalize">{roleLabel}</span>
             </p>
-            <span className="hidden h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-slate-200 sm:inline-flex" aria-hidden="true">
+            <span className="hidden h-8 w-8 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-ink sm:inline-flex" aria-hidden="true">
               {initialsFor(user)}
             </span>
             <button
               type="button"
               onClick={onLogout}
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-ink transition hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Sign out
             </button>
             <button
               type="button"
-              className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+              className="rounded-md border border-line px-3 py-1.5 text-sm text-ink lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               aria-expanded={mobileOpen}
               aria-controls={menuId}
               onClick={() => setMobileOpen((open) => !open)}
@@ -145,7 +153,7 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
         </div>
 
         {mobileOpen && (
-          <div id={menuId} className="border-t border-slate-800 bg-slate-950 px-4 py-4 lg:hidden" role="dialog" aria-modal="true" aria-label="Main menu">
+          <div id={menuId} className="border-t border-line bg-surface px-4 py-4 lg:hidden" role="dialog" aria-modal="true" aria-label="Main menu">
             <MobileNav groups={groups} pathname={location.pathname} onNavigate={() => setMobileOpen(false)} />
           </div>
         )}
@@ -193,8 +201,8 @@ function DesktopMenu({
     <div ref={ref} className="relative">
       <button
         type="button"
-        className={`inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 ${
-          open || groupActive ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+        className={`inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+          open || groupActive ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-elevated hover:text-ink'
         }`}
         aria-expanded={open}
         aria-haspopup="true"
@@ -202,12 +210,12 @@ function DesktopMenu({
         onClick={onToggle}
       >
         {group.label}
-        <span aria-hidden="true" className="text-[10px] text-slate-400">
+        <span aria-hidden="true" className="text-[10px] text-faint">
           ▾
         </span>
       </button>
       {open && (
-        <div id={menuId} role="menu" aria-label={group.label} className="absolute left-0 top-full z-40 min-w-64 rounded-xl border border-slate-800 bg-slate-900 p-2 shadow-xl">
+        <div id={menuId} role="menu" aria-label={group.label} className="absolute left-0 top-full z-40 min-w-64 rounded-xl border border-line bg-surface p-2 shadow-card">
           {group.items.map((item) => {
             const active = itemIsActive(pathname, item, group.items)
             return (
@@ -216,10 +224,12 @@ function DesktopMenu({
                 to={item.to}
                 role="menuitem"
                 aria-current={active ? 'page' : undefined}
-                className={`block rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 ${active ? 'bg-slate-800 text-white' : 'text-slate-200 hover:bg-slate-800/80'}`}
+                className={`block rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+                  active ? 'bg-accent-soft text-accent' : 'text-ink hover:bg-elevated'
+                }`}
               >
                 <span className="block text-sm font-medium">{item.label}</span>
-                <span className="block text-xs text-slate-400">{item.description}</span>
+                <span className="block text-xs text-muted">{item.description}</span>
               </NavLink>
             )
           })}
@@ -252,7 +262,7 @@ function MobileNav({
                 to={item.to}
                 aria-current={active ? 'page' : undefined}
                 onClick={onNavigate}
-                className={`block rounded-lg px-3 py-2 text-sm font-medium ${active ? 'bg-slate-800 text-white' : 'text-slate-200 hover:bg-slate-800'}`}
+                className={`block rounded-lg px-3 py-2 text-sm font-medium ${active ? 'bg-accent-soft text-accent' : 'text-ink hover:bg-elevated'}`}
               >
                 {item.to === '/' ? group.label : item.label}
               </NavLink>
@@ -261,10 +271,10 @@ function MobileNav({
         }
         const isOpen = expanded === group.id
         return (
-          <li key={group.id} className="rounded-lg border border-slate-800">
+          <li key={group.id} className="rounded-lg border border-line">
             <button
               type="button"
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium text-white"
+              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-medium text-ink"
               aria-expanded={isOpen}
               onClick={() => setExpanded((current) => (current === group.id ? null : group.id))}
             >
@@ -272,7 +282,7 @@ function MobileNav({
               <span aria-hidden="true">{isOpen ? '−' : '+'}</span>
             </button>
             {isOpen && (
-              <ul className="space-y-1 border-t border-slate-800 px-2 py-2">
+              <ul className="space-y-1 border-t border-line px-2 py-2">
                 {group.items.map((item) => {
                   const active = itemIsActive(pathname, item, group.items)
                   return (
@@ -281,10 +291,10 @@ function MobileNav({
                         to={item.to}
                         aria-current={active ? 'page' : undefined}
                         onClick={onNavigate}
-                        className={`block rounded-md px-3 py-2 ${active ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                        className={`block rounded-md px-3 py-2 ${active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-elevated'}`}
                       >
                         <span className="block text-sm">{item.label}</span>
-                        <span className="block text-xs text-slate-400">{item.description}</span>
+                        <span className="block text-xs text-muted">{item.description}</span>
                       </NavLink>
                     </li>
                   )

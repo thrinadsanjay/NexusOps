@@ -5,8 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="NexusOps infrastructure operations platform" />
     <title>NexusOps</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('nexusops-theme')
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var dark = stored === 'dark' || ((stored == null || stored === 'system') && prefersDark)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.classList.toggle('light', !dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (e) {}
+      })()
+    </script>
   </head>
-  <body class="bg-slate-950 text-slate-50">
+  <body class="bg-canvas text-ink">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
