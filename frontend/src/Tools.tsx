@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-
-function authHeaders() {
-  return { Authorization: `Bearer ${localStorage.getItem('nexusops_token') ?? ''}`, 'Content-Type': 'application/json' }
-}
+import { API_BASE_URL, authHeaders } from './api/client'
 
 type Tool = {
   id: string
@@ -169,23 +165,11 @@ export function ToolsPanel() {
 
       {/* LDAP login info */}
       <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5">
-        <h3 className="mb-4 text-sm font-semibold text-white">LDAP Credentials (bundled directory)</h3>
-        <div className="grid gap-3 md:grid-cols-2">
-          {[
-            { user: 'nexusadmin', pass: 'NexusOps2024!', role: 'Admin', badge: 'bg-rose-500/15 text-rose-300' },
-            { user: 'operator1', pass: 'Operator123!', role: 'Operator', badge: 'bg-amber-500/15 text-amber-300' },
-            { user: 'viewer1', pass: 'Viewer123!', role: 'Viewer', badge: 'bg-slate-700 text-slate-300' },
-          ].map(({ user, pass, role, badge }) => (
-            <div key={user} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-mono text-sm font-semibold text-white">{user}</span>
-                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${badge}`}>{role}</span>
-              </div>
-              <div className="mt-1 font-mono text-xs text-slate-400">{pass}</div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-[11px] text-slate-500">These users can log in to NexusOps directly. LDAP auth is tried automatically if local auth fails. Change these in your <span className="text-cyan-300">.env</span> before production use.</p>
+        <h3 className="mb-2 text-sm font-semibold text-white">Bundled directory accounts</h3>
+        <p className="text-sm text-slate-400">
+          Default LDAP users are documented in the repository README and <span className="text-cyan-300">.env.example</span>.
+          Do not keep development credentials in the UI. Change all bundled passwords before any networked deployment.
+        </p>
       </div>
     </section>
   )

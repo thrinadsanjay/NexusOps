@@ -11,8 +11,9 @@ describe('NexusOps app shell', () => {
 
   afterEach(() => {
     if (root) {
+      const current = root
       act(() => {
-        root.unmount()
+        current.unmount()
       })
     }
     container?.remove()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import require_permission
 from app.db import get_db
 from app.models import DnsRecord, DnsZone
 from app.schemas import (
@@ -25,7 +25,7 @@ VALID_TYPES = {"A", "AAAA", "CNAME", "MX", "TXT", "PTR", "NS", "SRV", "SOA", "CA
 # ── Zones ─────────────────────────────────────────────────────────────────────
 
 @router.get("/zones", response_model=list[DnsZoneRead])
-def list_zones(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[DnsZone]:
+def list_zones(db: Session = Depends(get_db), _: object = Depends(require_permission("dns:read"))) -> list[DnsZone]:
     return db.query(DnsZone).order_by(DnsZone.name).all()
 
 
@@ -39,7 +39,7 @@ def create_zone(payload: DnsZoneCreate, db: Session = Depends(get_db), _: object
 
 
 @router.get("/zones/{zone_id}", response_model=DnsZoneRead)
-def get_zone(zone_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> DnsZone:
+def get_zone(zone_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("dns:read"))) -> DnsZone:
     zone = db.query(DnsZone).filter(DnsZone.id == zone_id).first()
     if not zone:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
@@ -72,7 +72,7 @@ def list_records(
     zone_id: int,
     record_type: str | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("dns:read")),
 ) -> list[DnsRecord]:
     zone = db.query(DnsZone).filter(DnsZone.id == zone_id).first()
     if not zone:
@@ -123,7 +123,7 @@ def delete_record(zone_id: int, record_id: int, db: Session = Depends(get_db), _
 def search_records(
     q: str = Query(min_length=1),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("dns:read")),
 ) -> list[DnsRecord]:
     like = f"%{q}%"
     return db.query(DnsRecord).filter(

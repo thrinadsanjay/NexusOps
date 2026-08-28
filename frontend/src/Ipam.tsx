@@ -1,11 +1,6 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-
-function authHeaders() {
-  const token = localStorage.getItem('nexusops_token') ?? ''
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-}
+import { API_BASE_URL, authHeaders } from './api/client'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +56,11 @@ export function NetworkOverview() {
   const [quickGateway, setQuickGateway] = useState('')
   const [quickError, setQuickError] = useState('')
   const [quickAdding, setQuickAdding] = useState(false)
+  const pollTimers = useRef<number[]>([])
+
+  useEffect(() => () => {
+    pollTimers.current.forEach((id) => window.clearInterval(id))
+  }, [])
 
   const loadUtil = useCallback((s: Subnet) => {
     fetch(`${API_BASE_URL}/api/v1/ipam/subnets/${s.id}/utilization`, { headers: authHeaders() })
@@ -80,16 +80,21 @@ export function NetworkOverview() {
     setScanStates((p) => ({ ...p, [subnetId]: 'scanning' }))
     try {
       const r = await fetch(`${API_BASE_URL}/api/v1/ipam/subnets/${subnetId}/scan`, { method: 'POST', headers: authHeaders() })
-      const { task_id } = await r.json()
-      const poll = setInterval(async () => {
-        const sr = await fetch(`${API_BASE_URL}/api/v1/ipam/scan/${task_id}`, { headers: authHeaders() })
+      const payload = await r.json()
+      if (!r.ok) {
+        setScanStates((p) => ({ ...p, [subnetId]: payload.detail ?? 'scan refused' }))
+        return
+      }
+      const poll = window.setInterval(async () => {
+        const sr = await fetch(`${API_BASE_URL}/api/v1/ipam/scan/${payload.task_id}`, { headers: authHeaders() })
         const s = await sr.json()
         if (s.status === 'SUCCESS' || s.status === 'FAILURE') {
-          clearInterval(poll)
+          window.clearInterval(poll)
           setScanStates((p) => ({ ...p, [subnetId]: s.status === 'SUCCESS' ? `done – ${s.result?.added ?? 0} added, ${s.result?.updated ?? 0} updated` : 'scan error' }))
           loadAll()
         }
       }, 2000)
+      pollTimers.current.push(poll)
     } catch {
       setScanStates((p) => ({ ...p, [subnetId]: 'error' }))
     }
@@ -128,17 +133,22 @@ export function NetworkOverview() {
       setQuickCidr(''); setQuickName(''); setQuickGateway('')
       // auto-kick scan
       const sr = await fetch(`${API_BASE_URL}/api/v1/ipam/subnets/${data.id}/scan`, { method: 'POST', headers: authHeaders() })
-      const { task_id } = await sr.json()
+      const scanPayload = await sr.json()
+      if (!sr.ok) {
+        setScanStates((p) => ({ ...p, [data.id]: scanPayload.detail ?? 'scan refused' }))
+        return
+      }
       setScanStates((p) => ({ ...p, [data.id]: 'scanning' }))
-      const poll = setInterval(async () => {
-        const res = await fetch(`${API_BASE_URL}/api/v1/ipam/scan/${task_id}`, { headers: authHeaders() })
+      const poll = window.setInterval(async () => {
+        const res = await fetch(`${API_BASE_URL}/api/v1/ipam/scan/${scanPayload.task_id}`, { headers: authHeaders() })
         const s = await res.json()
         if (s.status === 'SUCCESS' || s.status === 'FAILURE') {
-          clearInterval(poll)
+          window.clearInterval(poll)
           setScanStates((p) => ({ ...p, [data.id]: s.status === 'SUCCESS' ? `done – ${s.result?.added ?? 0} added` : 'scan error' }))
           loadAll()
         }
       }, 2000)
+      pollTimers.current.push(poll)
     } catch {
       setQuickError('Request failed')
     } finally {

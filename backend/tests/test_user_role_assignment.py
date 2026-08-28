@@ -21,6 +21,7 @@ def test_admin_can_assign_role_to_user() -> None:
     roles_response = client.get("/api/v1/roles", headers=headers)
     assert roles_response.status_code == 200, roles_response.text
     viewer_role = next(role for role in roles_response.json() if role["name"] == "viewer")
+    admin_role = next(role for role in roles_response.json() if role["name"] == "admin")
 
     assign_response = client.put(
         f"/api/v1/users/{admin['id']}/roles",
@@ -32,3 +33,10 @@ def test_admin_can_assign_role_to_user() -> None:
     user_roles = client.get(f"/api/v1/users/{admin['id']}/roles", headers=headers)
     assert user_roles.status_code == 200, user_roles.text
     assert any(role["name"] == "viewer" for role in user_roles.json())
+
+    restore = client.put(
+        f"/api/v1/users/{admin['id']}/roles",
+        headers=headers,
+        json={"role_ids": [admin_role["id"]]},
+    )
+    assert restore.status_code == 200, restore.text

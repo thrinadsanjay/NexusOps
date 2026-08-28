@@ -1,15 +1,17 @@
 FROM python:3.12-slim
 
 WORKDIR /app
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=pypi.org
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
-    PIP_INDEX_URL=https://artifactory.colruyt.int/artifactory/api/pypi/pypi-remote/simple \
-    PIP_TRUSTED_HOST=artifactory.colruyt.int \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
     PIP_DEFAULT_TIMEOUT=300
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt --trusted-host files.pythonhosted.org --trusted-host pypi.org
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
 

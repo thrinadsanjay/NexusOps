@@ -1,9 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-function authHeaders() {
-  return { Authorization: `Bearer ${localStorage.getItem('nexusops_token') ?? ''}`, 'Content-Type': 'application/json' }
-}
+import { API_BASE_URL, authHeaders } from './api/client'
 
 // ── types ──────────────────────────────────────────────────────────────────
 

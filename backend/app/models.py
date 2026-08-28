@@ -414,7 +414,7 @@ class LdapServer(Base):
     use_tls: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     base_dn: Mapped[str] = Column(String(255), nullable=False)           # e.g. dc=homelab,dc=local
     bind_dn: Mapped[str | None] = Column(String(255), nullable=True)     # service account DN
-    bind_password: Mapped[str | None] = Column(String(255), nullable=True)  # stored in plaintext – use vault in prod
+    bind_password: Mapped[str | None] = Column(Text, nullable=True)  # Fernet ciphertext prefixed with enc:
     user_search_base: Mapped[str | None] = Column(String(255), nullable=True)
     user_filter: Mapped[str] = Column(String(255), default="(objectClass=person)", nullable=False)
     user_attr_map: Mapped[str] = Column(Text, default='{"username":"sAMAccountName","email":"mail","full_name":"cn"}', nullable=False)  # JSON

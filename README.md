@@ -38,12 +38,14 @@ docker compose exec openldap ldapadd -x -D "cn=admin,dc=homelab,dc=local" \
 |---|---|
 | NexusOps UI | http://localhost:5173 |
 | NexusOps API + Swagger | http://localhost:8000/docs |
-| phpLDAPadmin | http://localhost:8082 |
+| phpLDAPadmin | http://127.0.0.1:8082 (localhost only) |
+
+PostgreSQL, Redis, and OpenLDAP are attached to the Compose network only and are not published on the host.
 
 **Default local admin:** `admin` / `ChangeMe123!`  
 **Default LDAP users:** `nexusadmin` / `NexusOps2024!` · `operator1` / `Operator123!` · `viewer1` / `Viewer123!`
 
-> Change all default passwords before any network-exposed deployment.
+> Change all default passwords and `JWT_SECRET_KEY` before any network-exposed deployment. Non-development environments refuse to start if those defaults are left in place.
 
 ---
 

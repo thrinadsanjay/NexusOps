@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { apiFetch, clearAuth, getToken, readStoredUser, storeAuth } from './api/client'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
 import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
 import { DnsOverview } from './Dns'
@@ -9,17 +10,17 @@ import { LdapPanel } from './Ldap'
 import { ToolsPanel } from './Tools'
 
 const navItems = [
-  { label: 'Overview', to: '/' },
-  { label: 'Users', to: '/users' },
-  { label: 'Roles', to: '/roles' },
-  { label: 'Network', to: '/ipam' },
-  { label: 'Inventory', to: '/inventory' },
-  { label: 'DNS', to: '/dns' },
-  { label: 'DHCP', to: '/dhcp' },
-  { label: 'PKI', to: '/pki' },
-  { label: 'LDAP', to: '/ldap' },
-  { label: 'Tools', to: '/tools' },
-  { label: 'Settings', to: '/settings' },
+  { label: 'Overview', to: '/', permission: null },
+  { label: 'Users', to: '/users', permission: 'users:read' },
+  { label: 'Roles', to: '/roles', permission: 'roles:read' },
+  { label: 'Network', to: '/ipam', permission: 'ipam:read' },
+  { label: 'Inventory', to: '/inventory', permission: 'inventory:read' },
+  { label: 'DNS', to: '/dns', permission: 'dns:read' },
+  { label: 'DHCP', to: '/dhcp', permission: 'dhcp:read' },
+  { label: 'PKI', to: '/pki', permission: 'pki:read' },
+  { label: 'LDAP', to: '/ldap', permission: 'ldap:read' },
+  { label: 'Tools', to: '/tools', permission: null },
+  { label: 'Settings', to: '/settings', permission: 'settings:read' },
 ]
 
 type AuthUser = {
@@ -30,6 +31,8 @@ type AuthUser = {
   is_active: boolean
   is_superuser: boolean
   created_at: string
+  permissions?: string[]
+  role_names?: string[]
 }
 
 type AuthResponse = {
@@ -59,6 +62,8 @@ type UserRecord = {
   is_active: boolean
   is_superuser: boolean
   created_at: string
+  role_names?: string[]
+  permissions?: string[]
 }
 
 type AuditLog = {
@@ -90,101 +95,89 @@ type ApiToken = {
   token?: string
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+function hasPermission(user: AuthUser | null, permission: string | null): boolean {
+  if (!permission) {
+    return true
+  }
+  if (!user) {
+    return false
+  }
+  if (user.is_superuser) {
+    return true
+  }
+  return (user.permissions ?? []).includes(permission)
+}
 
 function App() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexusops_token'))
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const savedUser = localStorage.getItem('nexusops_user')
-    return savedUser ? JSON.parse(savedUser) : null
-  })
+  const [token, setToken] = useState<string | null>(() => getToken() || null)
+  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser<AuthUser>())
   const [users, setUsers] = useState<UserRecord[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [permissions, setPermissions] = useState<Permission[]>([])
   const [settings, setSettings] = useState<Record<string, string>>({})
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [apiTokens, setApiTokens] = useState<ApiToken[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [navOpen, setNavOpen] = useState(false)
 
   const isAuthenticated = Boolean(token && user)
 
   useEffect(() => {
     if (!token) {
       setUser(null)
-      localStorage.removeItem('nexusops_user')
       return
     }
 
     setLoading(true)
-    fetch(`${API_BASE_URL}/api/v1/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      credentials: 'include',
-    })
+    apiFetch('/api/v1/auth/me')
       .then(async (response) => {
         if (!response.ok) {
           throw new Error('Session expired')
         }
         const data = await response.json()
         setUser(data)
-        localStorage.setItem('nexusops_user', JSON.stringify(data))
+        storeAuth(token, data)
       })
       .catch(() => {
+        clearAuth()
         setToken(null)
         setUser(null)
-        localStorage.removeItem('nexusops_token')
-        localStorage.removeItem('nexusops_user')
       })
       .finally(() => setLoading(false))
   }, [token])
 
   useEffect(() => {
-    if (!isAuthenticated || !token) {
+    if (!isAuthenticated || !token || !user) {
       return
     }
 
-    const headers = {
-      Authorization: `Bearer ${token}`,
+    const loadIfAllowed = async <T,>(path: string, permission: string, onOk: (payload: T) => void) => {
+      if (!hasPermission(user, permission)) {
+        return
+      }
+      const response = await apiFetch(path)
+      if (response.ok) {
+        onOk((await response.json()) as T)
+      }
     }
 
-    Promise.all([
-      fetch(`${API_BASE_URL}/api/v1/users`, { headers, credentials: 'include' }),
-      fetch(`${API_BASE_URL}/api/v1/roles`, { headers, credentials: 'include' }),
-      fetch(`${API_BASE_URL}/api/v1/settings`, { headers, credentials: 'include' }),
-      fetch(`${API_BASE_URL}/api/v1/audit`, { headers, credentials: 'include' }),
-      fetch(`${API_BASE_URL}/api/v1/api-tokens`, { headers, credentials: 'include' }),
+    void Promise.allSettled([
+      loadIfAllowed<UserRecord[]>('/api/v1/users', 'users:read', setUsers),
+      loadIfAllowed<Role[]>('/api/v1/roles', 'roles:read', setRoles),
+      loadIfAllowed<Permission[]>('/api/v1/permissions', 'roles:read', setPermissions),
+      loadIfAllowed<Record<string, string>>('/api/v1/settings', 'settings:read', setSettings),
+      loadIfAllowed<AuditLog[]>('/api/v1/audit', 'audit:read', setAuditLogs),
+      loadIfAllowed<ApiToken[]>('/api/v1/api-tokens', 'tokens:write', setApiTokens),
     ])
-      .then(async ([userResponse, roleResponse, settingsResponse, auditResponse, tokensResponse]) => {
-        if (!userResponse.ok || !roleResponse.ok || !settingsResponse.ok || !auditResponse.ok || !tokensResponse.ok) {
-          throw new Error('Unable to load access data')
-        }
-
-        const [userData, roleData, settingData, auditData, tokenData] = await Promise.all([
-          userResponse.json() as Promise<UserRecord[]>,
-          roleResponse.json() as Promise<Role[]>,
-          settingsResponse.json() as Promise<Record<string, string>>,
-          auditResponse.json() as Promise<AuditLog[]>,
-          tokensResponse.json() as Promise<ApiToken[]>,
-        ])
-
-        setUsers(userData)
-        setRoles(roleData)
-        setSettings(settingData)
-        setAuditLogs(auditData)
-        setApiTokens(tokenData)
-      })
-      .catch(() => {
-        setError('Unable to load admin metadata')
-      })
-  }, [isAuthenticated, token])
+  }, [isAuthenticated, token, user])
 
   const handleLogin = async (username: string, password: string) => {
     setLoading(true)
     setError('')
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+      const response = await apiFetch('/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -199,8 +192,7 @@ function App() {
       }
 
       const auth: AuthResponse = payload
-      localStorage.setItem('nexusops_token', auth.access_token)
-      localStorage.setItem('nexusops_user', JSON.stringify(auth.user))
+      storeAuth(auth.access_token, auth.user)
       setToken(auth.access_token)
       setUser(auth.user)
     } catch (err) {
@@ -211,20 +203,17 @@ function App() {
   }
 
   const handleLogout = () => {
-    fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token ?? ''}`,
-      },
-      credentials: 'include',
-    }).catch(() => undefined)
+    apiFetch('/api/v1/auth/logout', { method: 'POST' }).catch(() => undefined)
 
-    localStorage.removeItem('nexusops_token')
-    localStorage.removeItem('nexusops_user')
+    clearAuth()
     setToken(null)
     setUser(null)
     setUsers([])
     setRoles([])
+    setPermissions([])
+    setSettings({})
+    setAuditLogs([])
+    setApiTokens([])
   }
 
   const handleCreateUser = async (payload: { email: string; username: string; full_name: string; password: string }) => {
@@ -236,7 +225,7 @@ function App() {
     setError('')
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
+      const response = await apiFetch('/api/v1/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -264,7 +253,7 @@ function App() {
       return
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/settings`, {
+    const response = await apiFetch('/api/v1/settings', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -287,7 +276,7 @@ function App() {
       return
     }
 
-    const response = await fetch(`${API_BASE_URL}/api/v1/api-tokens`, {
+    const response = await apiFetch('/api/v1/api-tokens', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -304,8 +293,8 @@ function App() {
 
     setApiTokens((currentTokens) => [
       {
-        id: Date.now(),
-        name,
+        id: data.id,
+        name: data.name,
         prefix: data.prefix,
         created_at: new Date().toISOString(),
         expires_at: data.expires_at,
@@ -317,6 +306,55 @@ function App() {
 
     return data.token as string
   }
+
+  const handleRevokeToken = async (tokenId: number) => {
+    const response = await apiFetch(`/api/v1/api-tokens/${tokenId}`, { method: 'DELETE' })
+    if (!response.ok && response.status !== 204) {
+      throw new Error('Unable to revoke token')
+    }
+    setApiTokens((current) => current.map((item) => (item.id === tokenId ? { ...item, is_active: false } : item)))
+  }
+
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    const response = await apiFetch('/api/v1/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data.detail ?? 'Unable to change password')
+    }
+  }
+
+  const handleAssignUserRoles = async (userId: number, roleIds: number[]) => {
+    const response = await apiFetch(`/api/v1/users/${userId}/roles`, {
+      method: 'PUT',
+      body: JSON.stringify({ role_ids: roleIds }),
+    })
+    if (!response.ok) {
+      throw new Error('Unable to update user roles')
+    }
+    const assigned = (await response.json()) as Role[]
+    setUsers((current) =>
+      current.map((item) => (item.id === userId ? { ...item, role_names: assigned.map((role) => role.name) } : item)),
+    )
+  }
+
+  const handleSaveRolePermissions = async (roleId: number, permissionIds: number[]) => {
+    const response = await apiFetch(`/api/v1/roles/${roleId}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permission_ids: permissionIds }),
+    })
+    if (!response.ok) {
+      throw new Error('Unable to update role permissions')
+    }
+    const updated = (await response.json()) as Role
+    setRoles((current) => current.map((role) => (role.id === roleId ? updated : role)))
+  }
+
+  const visibleNav = navItems.filter((item) => hasPermission(user, item.permission))
+  const canWriteRoles = hasPermission(user, 'roles:write')
+  const canWriteUsers = hasPermission(user, 'users:write')
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.14),_transparent_35%),linear-gradient(180deg,_#020817_0%,_#0f172a_100%)] text-slate-100">
@@ -334,15 +372,27 @@ function App() {
 
           {isAuthenticated && (
             <div className="flex items-center gap-2 md:gap-4">
-              {navItems.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="rounded-full px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                >
-                  {item.label}
-                </Link>
-              ))}
+              <button
+                type="button"
+                className="rounded-full border border-slate-700 px-3 py-2 text-sm text-slate-200 lg:hidden"
+                onClick={() => setNavOpen((open) => !open)}
+              >
+                Menu
+              </button>
+              <div className={`${navOpen ? 'flex' : 'hidden'} absolute left-0 right-0 top-16 z-30 flex-col gap-1 border-b border-slate-800 bg-slate-950 px-6 py-3 lg:static lg:flex lg:flex-row lg:items-center lg:gap-2 lg:border-0 lg:bg-transparent lg:p-0`}>
+                {visibleNav.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setNavOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-full px-3 py-2 text-sm transition ${isActive ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -359,33 +409,35 @@ function App() {
         <Routes>
           <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login onSubmit={handleLogin} loading={loading} error={error} />} />
           <Route path="/" element={isAuthenticated ? <Overview user={user!} /> : <Navigate to="/login" replace />} />
-          <Route path="/users" element={isAuthenticated ? <UsersPanel users={users} onCreateUser={handleCreateUser} /> : <Navigate to="/login" replace />} />
-          <Route path="/roles" element={isAuthenticated ? <RolesPanel roles={roles} /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam/vlans" element={isAuthenticated ? <VLansPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam/subnets" element={isAuthenticated ? <SubnetsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam/addresses" element={isAuthenticated ? <IPAddressesPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam" element={isAuthenticated ? <NetworkOverview /> : <Navigate to="/login" replace />} />
-          <Route path="/inventory" element={isAuthenticated ? <HostsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/inventory/tags" element={isAuthenticated ? <TagsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/inventory/groups" element={isAuthenticated ? <GroupsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/dns" element={isAuthenticated ? <DnsOverview /> : <Navigate to="/login" replace />} />
-          <Route path="/dhcp" element={isAuthenticated ? <DhcpPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/pki" element={isAuthenticated ? <PkiPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ldap" element={isAuthenticated ? <LdapPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/users" element={isAuthenticated && hasPermission(user, 'users:read') ? <UsersPanel users={users} roles={roles} canWrite={canWriteUsers} onCreateUser={handleCreateUser} onAssignRoles={handleAssignUserRoles} /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/roles" element={isAuthenticated && hasPermission(user, 'roles:read') ? <RolesPanel roles={roles} permissions={permissions} canWrite={canWriteRoles} onSavePermissions={handleSaveRolePermissions} /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/ipam/vlans" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <VLansPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/ipam/subnets" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <SubnetsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/ipam/addresses" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <IPAddressesPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/ipam" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <NetworkOverview /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/inventory" element={isAuthenticated && hasPermission(user, 'inventory:read') ? <HostsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/inventory/tags" element={isAuthenticated && hasPermission(user, 'inventory:read') ? <TagsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/inventory/groups" element={isAuthenticated && hasPermission(user, 'inventory:read') ? <GroupsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/dns" element={isAuthenticated && hasPermission(user, 'dns:read') ? <DnsOverview /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/dhcp" element={isAuthenticated && hasPermission(user, 'dhcp:read') ? <DhcpPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/pki" element={isAuthenticated && hasPermission(user, 'pki:read') ? <PkiPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="/ldap" element={isAuthenticated && hasPermission(user, 'ldap:read') ? <LdapPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
           <Route path="/tools" element={isAuthenticated ? <ToolsPanel /> : <Navigate to="/login" replace />} />
           <Route
             path="/settings"
             element={
-              isAuthenticated ? (
+              isAuthenticated && hasPermission(user, 'settings:read') ? (
                 <SettingsPanel
                   settings={settings}
                   auditLogs={auditLogs}
                   apiTokens={apiTokens}
                   onSaveSetting={handleSaveSetting}
                   onCreateToken={handleCreateToken}
+                  onRevokeToken={handleRevokeToken}
+                  onChangePassword={handleChangePassword}
                 />
               ) : (
-                <Navigate to="/login" replace />
+                <Navigate to={isAuthenticated ? '/' : '/login'} replace />
               )
             }
           />
@@ -403,8 +455,8 @@ type LoginProps = {
 }
 
 function Login({ onSubmit, loading, error }: LoginProps) {
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('ChangeMe123!')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -502,8 +554,6 @@ function Login({ onSubmit, loading, error }: LoginProps) {
 
 function Overview({ user }: { user: AuthUser }) {
   const greeting = useMemo(() => user.full_name || user.username || 'Operator', [user])
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-  const token = localStorage.getItem('nexusops_token') ?? ''
 
   type Stats = {
     auth: { total_users: number; active_users: number; total_roles: number; total_permissions: number; active_tokens: number }
@@ -511,15 +561,16 @@ function Overview({ user }: { user: AuthUser }) {
     inventory: { total_hosts: number; active_hosts: number; unknown_hosts: number }
     dns: { total_zones: number; forward_zones: number; total_records: number }
     dhcp: { total_servers: number; total_pools: number; active_leases: number; total_reservations: number }
+    pki?: { total_cas: number; total_certs: number; active_certs: number; expiring_30d: number }
     audit: { id: number; action: string; resource: string; success: boolean; created_at: string }[]
   }
 
   const [stats, setStats] = useState<Stats | null>(null)
 
   const loadStats = useCallback(() => {
-    fetch(`${API_BASE_URL}/api/v1/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
+    apiFetch('/api/v1/dashboard/stats')
       .then((r) => r.json()).then(setStats).catch(() => undefined)
-  }, [API_BASE_URL, token])
+  }, [])
 
   useEffect(() => {
     loadStats()
@@ -532,7 +583,7 @@ function Overview({ user }: { user: AuthUser }) {
     { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
     { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
     { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
-    { title: 'PKI', to: '/pki', icon: 'P', desc: 'Certificates and CAs', stat: stats ? `${(stats as any).pki?.active_certs ?? 0} active · ${(stats as any).pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
+    { title: 'PKI', to: '/pki', icon: 'P', desc: 'Certificates and CAs', stat: stats ? `${stats.pki?.active_certs ?? 0} active · ${stats.pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
     { title: 'LDAP', to: '/ldap', icon: 'L', desc: 'Directory integration & user sync', stat: 'Browse · Sync · Import', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
     { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
     { title: 'Settings', to: '/settings', icon: 'S', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—', panel: 'from-slate-700/40 to-slate-800/20 border-slate-700/60', badge: 'bg-slate-700 text-slate-300' },
@@ -622,10 +673,16 @@ function Overview({ user }: { user: AuthUser }) {
 
 function UsersPanel({
   users,
+  roles,
+  canWrite,
   onCreateUser,
+  onAssignRoles,
 }: {
   users: UserRecord[]
+  roles: Role[]
+  canWrite: boolean
   onCreateUser: (payload: { email: string; username: string; full_name: string; password: string }) => Promise<void> | void
+  onAssignRoles: (userId: number, roleIds: number[]) => Promise<void>
 }) {
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
@@ -663,6 +720,7 @@ function UsersPanel({
         </div>
       </div>
 
+      {canWrite && (
       <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
@@ -684,6 +742,7 @@ function UsersPanel({
           <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Create user</button>
         </div>
       </form>
+      )}
 
       <div className="overflow-hidden rounded-[26px] border border-slate-800 bg-slate-900/80 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
         <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
@@ -712,7 +771,26 @@ function UsersPanel({
                       {userRecord.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-4 py-4 text-slate-300">{userRecord.is_superuser ? 'Admin' : 'User'}</td>
+                  <td className="px-4 py-4 text-slate-300">
+                    <div>{(userRecord.role_names && userRecord.role_names.length > 0) ? userRecord.role_names.join(', ') : (userRecord.is_superuser ? 'Admin' : 'User')}</div>
+                    {canWrite && roles.length > 0 && (
+                      <select
+                        className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-200"
+                        defaultValue=""
+                        onChange={(event) => {
+                          const roleId = Number(event.target.value)
+                          if (roleId) {
+                            void onAssignRoles(userRecord.id, [roleId])
+                          }
+                        }}
+                      >
+                        <option value="">Assign role…</option>
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.id}>{role.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
                   <td className="px-4 py-4 text-slate-300">{new Date(userRecord.created_at).toLocaleDateString()}</td>
                 </tr>
               ))
@@ -724,7 +802,17 @@ function UsersPanel({
   )
 }
 
-function RolesPanel({ roles }: { roles: Role[] }) {
+function RolesPanel({
+  roles,
+  permissions,
+  canWrite,
+  onSavePermissions,
+}: {
+  roles: Role[]
+  permissions: Permission[]
+  canWrite: boolean
+  onSavePermissions: (roleId: number, permissionIds: number[]) => Promise<void>
+}) {
   return (
     <section className="space-y-6">
       <div>
@@ -755,6 +843,29 @@ function RolesPanel({ roles }: { roles: Role[] }) {
                   ))
                 )}
               </ul>
+              {canWrite && permissions.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {permissions.map((permission) => {
+                    const checked = role.permissions.some((item) => item.id === permission.id)
+                    return (
+                      <label key={permission.id} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => {
+                            const current = role.permissions.map((item) => item.id)
+                            const next = event.target.checked
+                              ? [...current, permission.id]
+                              : current.filter((id) => id !== permission.id)
+                            void onSavePermissions(role.id, next)
+                          }}
+                        />
+                        {permission.name}
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ))
         )}
@@ -769,12 +880,16 @@ function SettingsPanel({
   apiTokens,
   onSaveSetting,
   onCreateToken,
+  onRevokeToken,
+  onChangePassword,
 }: {
   settings: Record<string, string>
   auditLogs: AuditLog[]
   apiTokens: ApiToken[]
   onSaveSetting: (key: string, value: string, description?: string) => Promise<void>
   onCreateToken: (name: string, expiresDays: number) => Promise<string | undefined>
+  onRevokeToken: (tokenId: number) => Promise<void>
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }) {
   const [key, setKey] = useState('app_name')
   const [value, setValue] = useState('NexusOps')
@@ -782,6 +897,9 @@ function SettingsPanel({
   const [tokenName, setTokenName] = useState('')
   const [expiresDays, setExpiresDays] = useState(30)
   const [newToken, setNewToken] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordMessage, setPasswordMessage] = useState('')
 
   const handleSettingSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -805,6 +923,19 @@ function SettingsPanel({
     setNewToken(token ?? '')
     setTokenName('')
     setExpiresDays(30)
+  }
+
+  const handlePasswordSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    setPasswordMessage('')
+    try {
+      await onChangePassword(currentPassword, newPassword)
+      setPasswordMessage('Password updated')
+      setCurrentPassword('')
+      setNewPassword('')
+    } catch (err) {
+      setPasswordMessage(err instanceof Error ? err.message : 'Unable to change password')
+    }
   }
 
   return (
@@ -856,6 +987,22 @@ function SettingsPanel({
             </div>
           )}
         </form>
+
+        <form onSubmit={handlePasswordSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] xl:col-span-2">
+          <h3 className="text-xl font-semibold text-white">Change password</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor="current-password" className="mb-2 block text-sm font-medium text-slate-200">Current password</label>
+              <input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            </div>
+            <div>
+              <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-slate-200">New password</label>
+              <input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            </div>
+          </div>
+          <button type="submit" className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2.5 font-semibold text-slate-100 transition hover:bg-slate-800">Update password</button>
+          {passwordMessage && <p className="text-sm text-slate-300">{passwordMessage}</p>}
+        </form>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -891,6 +1038,15 @@ function SettingsPanel({
                   </div>
                   <div className="mt-2 text-xs text-slate-400">Prefix: {token.prefix}</div>
                   <div className="text-xs text-slate-400">Created: {new Date(token.created_at).toLocaleDateString()}</div>
+                  {token.is_active && (
+                    <button
+                      type="button"
+                      className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200"
+                      onClick={() => void onRevokeToken(token.id)}
+                    >
+                      Revoke
+                    </button>
+                  )}
                 </div>
               ))
             )}

@@ -32,11 +32,33 @@ class UserRead(BaseModel):
     is_active: bool
     is_superuser: bool
     created_at: datetime
+    permissions: list[str] = []
+    role_names: list[str] = []
+
+    @classmethod
+    def from_user(cls, user: object) -> "UserRead":
+        roles = getattr(user, "roles", []) or []
+        return cls(
+            id=getattr(user, "id"),
+            email=getattr(user, "email"),
+            username=getattr(user, "username"),
+            full_name=getattr(user, "full_name", None),
+            is_active=bool(getattr(user, "is_active", False)),
+            is_superuser=bool(getattr(user, "is_superuser", False)),
+            created_at=getattr(user, "created_at"),
+            permissions=sorted({permission.name for role in roles for permission in getattr(role, "permissions", [])}),
+            role_names=[getattr(role, "name") for role in roles],
+        )
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class AuthToken(BaseModel):
@@ -105,6 +127,15 @@ class ApiTokenRead(BaseModel):
     expires_at: datetime | None = None
     last_used_at: datetime | None = None
     is_active: bool
+
+
+class ApiTokenCreated(BaseModel):
+    id: int
+    name: str
+    prefix: str
+    token: str
+    expires_at: datetime | None = None
+    is_active: bool = True
 
 
 # ---------------------------------------------------------------------------

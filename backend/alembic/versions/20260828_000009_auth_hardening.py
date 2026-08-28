@@ -1,8 +1,8 @@
-"""phase0 init – core auth, RBAC, sessions, API tokens, audit, settings
+"""phase hardening – ensure core auth tables exist; widen ldap bind_password
 
-Revision ID: 000000000001
-Revises:
-Create Date: 2026-08-26 00:00:00.000000
+Revision ID: 000000000009
+Revises: 000000000008
+Create Date: 2026-08-28 12:00:00.000000
 """
 
 from __future__ import annotations
@@ -10,19 +10,13 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "000000000001"
-down_revision = None
+revision = "000000000009"
+down_revision = "000000000008"
 branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
-    existing = set(inspector.get_table_names())
-    if "users" in existing:
-        return
-
+def _create_core_tables() -> None:
     op.create_table(
         "roles",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -120,16 +114,31 @@ def upgrade() -> None:
     op.create_index("ix_app_settings_key", "app_settings", ["key"], unique=True)
 
 
+def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing = set(inspector.get_table_names())
+    if "users" not in existing:
+        _create_core_tables()
+
+    if "ldap_servers" in existing:
+        with op.batch_alter_table("ldap_servers") as batch:
+            batch.alter_column(
+                "bind_password",
+                existing_type=sa.String(length=255),
+                type_=sa.Text(),
+                existing_nullable=True,
+            )
+
+
 def downgrade() -> None:
-    for table in [
-        "app_settings",
-        "audit_logs",
-        "api_tokens",
-        "user_sessions",
-        "role_permissions",
-        "user_roles",
-        "users",
-        "permissions",
-        "roles",
-    ]:
-        op.drop_table(table)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "ldap_servers" in inspector.get_table_names():
+        with op.batch_alter_table("ldap_servers") as batch:
+            batch.alter_column(
+                "bind_password",
+                existing_type=sa.Text(),
+                type_=sa.String(length=255),
+                existing_nullable=True,
+            )

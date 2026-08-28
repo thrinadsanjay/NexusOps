@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import require_permission
 from app.db import get_db
 from app.models import Host, HostGroup, HostTag
 from app.schemas import (
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/inventory", tags=["inventory"])
 # ── Tags ─────────────────────────────────────────────────────────────────────
 
 @router.get("/tags", response_model=list[HostTagRead])
-def list_tags(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[HostTag]:
+def list_tags(db: Session = Depends(get_db), _: object = Depends(require_permission("inventory:read"))) -> list[HostTag]:
     return db.query(HostTag).order_by(HostTag.name).all()
 
 
@@ -48,7 +48,7 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db), _: object = Depends(r
 # ── Groups ────────────────────────────────────────────────────────────────────
 
 @router.get("/groups", response_model=list[HostGroupRead])
-def list_groups(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[HostGroup]:
+def list_groups(db: Session = Depends(get_db), _: object = Depends(require_permission("inventory:read"))) -> list[HostGroup]:
     return db.query(HostGroup).order_by(HostGroup.name).all()
 
 
@@ -78,7 +78,7 @@ def list_hosts(
     group_id: int | None = Query(default=None),
     tag_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("inventory:read")),
 ) -> list[Host]:
     query = db.query(Host)
     if q:
@@ -109,7 +109,7 @@ def create_host(payload: HostCreate, db: Session = Depends(get_db), _: object = 
 
 
 @router.get("/hosts/{host_id}", response_model=HostRead)
-def get_host(host_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> Host:
+def get_host(host_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("inventory:read"))) -> Host:
     host = db.query(Host).filter(Host.id == host_id).first()
     if not host:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Host not found")

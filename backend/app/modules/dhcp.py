@@ -7,7 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import require_permission
 from app.db import get_db
 from app.models import DhcpLease, DhcpPool, DhcpReservation, DhcpServer
 from app.schemas import (
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/v1/dhcp", tags=["dhcp"])
 # ── Servers ───────────────────────────────────────────────────────────────────
 
 @router.get("/servers", response_model=list[DhcpServerRead])
-def list_servers(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[DhcpServer]:
+def list_servers(db: Session = Depends(get_db), _: object = Depends(require_permission("dhcp:read"))) -> list[DhcpServer]:
     return db.query(DhcpServer).order_by(DhcpServer.name).all()
 
 
@@ -41,7 +41,7 @@ def create_server(payload: DhcpServerCreate, db: Session = Depends(get_db), _: o
 
 
 @router.get("/servers/{server_id}", response_model=DhcpServerRead)
-def get_server(server_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> DhcpServer:
+def get_server(server_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("dhcp:read"))) -> DhcpServer:
     server = db.query(DhcpServer).filter(DhcpServer.id == server_id).first()
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DHCP server not found")
@@ -70,7 +70,7 @@ def delete_server(server_id: int, db: Session = Depends(get_db), _: object = Dep
 # ── Pools ─────────────────────────────────────────────────────────────────────
 
 @router.get("/servers/{server_id}/pools", response_model=list[DhcpPoolRead])
-def list_pools(server_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[DhcpPool]:
+def list_pools(server_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("dhcp:read"))) -> list[DhcpPool]:
     if not db.query(DhcpServer).filter(DhcpServer.id == server_id).first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="DHCP server not found")
     return db.query(DhcpPool).filter(DhcpPool.server_id == server_id).all()
@@ -107,7 +107,7 @@ def delete_pool(server_id: int, pool_id: int, db: Session = Depends(get_db), _: 
 # ── Leases ────────────────────────────────────────────────────────────────────
 
 @router.get("/servers/{server_id}/pools/{pool_id}/leases", response_model=list[DhcpLeaseRead])
-def list_leases(server_id: int, pool_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[DhcpLease]:
+def list_leases(server_id: int, pool_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("dhcp:read"))) -> list[DhcpLease]:
     if not db.query(DhcpPool).filter(DhcpPool.id == pool_id, DhcpPool.server_id == server_id).first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pool not found")
     return db.query(DhcpLease).filter(DhcpLease.pool_id == pool_id).order_by(DhcpLease.ip_address).all()
@@ -133,7 +133,7 @@ def delete_lease(server_id: int, pool_id: int, lease_id: int, db: Session = Depe
 # ── Reservations ──────────────────────────────────────────────────────────────
 
 @router.get("/servers/{server_id}/pools/{pool_id}/reservations", response_model=list[DhcpReservationRead])
-def list_reservations(server_id: int, pool_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[DhcpReservation]:
+def list_reservations(server_id: int, pool_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("dhcp:read"))) -> list[DhcpReservation]:
     if not db.query(DhcpPool).filter(DhcpPool.id == pool_id, DhcpPool.server_id == server_id).first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pool not found")
     return db.query(DhcpReservation).filter(DhcpReservation.pool_id == pool_id).order_by(DhcpReservation.ip_address).all()
@@ -165,7 +165,7 @@ def delete_reservation(server_id: int, pool_id: int, res_id: int, db: Session = 
 def all_leases(
     active_only: bool = True,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("dhcp:read")),
 ) -> list[DhcpLease]:
     q = db.query(DhcpLease)
     if active_only:
