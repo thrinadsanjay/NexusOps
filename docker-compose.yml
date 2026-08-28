@@ -1,3 +1,6 @@
+# App images default to GHCR tags published by .github/workflows/docker-publish.yml.
+# Override with NEXUSOPS_BACKEND_IMAGE / NEXUSOPS_FRONTEND_IMAGE, or build locally:
+#   docker compose up --build
 services:
   postgres:
     image: postgres:16-alpine
@@ -31,9 +34,13 @@ services:
       retries: 10
 
   backend:
+    image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: nexusops-backend
     env_file:
       - .env
@@ -45,8 +52,8 @@ services:
       LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
       LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
       PYTHONPATH: /app
-      PIP_INDEX_URL: https://artifactory.colruyt.int/artifactory/api/pypi/pypi-remote/simple
-      PIP_TRUSTED_HOST: artifactory.colruyt.int
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+      PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     ports:
       - "8000:8000"
     cap_add:
@@ -67,9 +74,13 @@ services:
       retries: 10
 
   worker:
+    image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: nexusops-worker
     env_file:
       - .env
@@ -77,8 +88,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       PYTHONPATH: /app
-      PIP_INDEX_URL: https://artifactory.colruyt.int/artifactory/api/pypi/pypi-remote/simple
-      PIP_TRUSTED_HOST: artifactory.colruyt.int
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+      PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,6 +98,7 @@ services:
     command: celery -A app.worker worker --loglevel=info
 
   frontend:
+    image: ${NEXUSOPS_FRONTEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-frontend:latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile

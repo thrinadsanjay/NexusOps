@@ -1,0 +1,153 @@
+name: Build and push images
+
+on:
+  push:
+    branches: [Development, main]
+    tags: ["v*"]
+  pull_request:
+    branches: [Development, main]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # linux/amd64 keeps GitHub-hosted builds fast. Add linux/arm64 here if you need Apple Silicon / ARM hosts.
+  PLATFORMS: linux/amd64
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Backend tests
+        working-directory: backend
+        env:
+          APP_ENV: development
+          DATABASE_URL: sqlite:///./nexusops.db
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          PYTHONPATH=. python -m pytest -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+
+  docker:
+    name: ${{ matrix.image }} image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - image: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lowercase image namespace
+        id: ns
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          NAME="${{ matrix.image }}"
+          {
+            echo "images<<EOF"
+            echo "ghcr.io/${OWNER}/nexusops-${NAME}"
+            if [ -n "${DOCKERHUB_USERNAME}" ]; then
+              echo "${DOCKERHUB_USERNAME}/nexusops-${NAME}"
+            fi
+            echo "EOF"
+            if [ -n "${DOCKERHUB_USERNAME}" ]; then
+              echo "dockerhub=true"
+            else
+              echo "dockerhub=false"
+            fi
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request' && steps.ns.outputs.dockerhub == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ns.outputs.images }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/Development' }}
+            type=raw,value=stable,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Backend build args
+        id: args
+        run: |
+          if [ "${{ matrix.image }}" = "backend" ]; then
+            echo "list<<EOF" >> "$GITHUB_OUTPUT"
+            echo "PIP_INDEX_URL=https://pypi.org/simple" >> "$GITHUB_OUTPUT"
+            echo "PIP_TRUSTED_HOST=pypi.org" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "list=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ env.PLATFORMS }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          provenance: false
+          build-args: ${{ steps.args.outputs.list }}
