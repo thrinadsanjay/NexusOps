@@ -77,44 +77,31 @@ export function useTheme() {
   return context
 }
 
-function SunIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <circle cx="12" cy="12" r="4" />
-      <path strokeLinecap="round" d="M12 3v1.5M12 19.5V21M4.93 4.93l1.06 1.06M18.01 18.01l1.06 1.06M3 12h1.5M19.5 12H21M4.93 19.07l1.06-1.06M18.01 5.99l1.06-1.06" />
-    </svg>
-  )
-}
-
-function MoonIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M20 14.5A7.5 7.5 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5Z"
-      />
-    </svg>
-  )
-}
-
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
-  const { resolved, setTheme } = useTheme()
-  const next: ResolvedTheme = resolved === 'dark' ? 'light' : 'dark'
-  const label = `Switch to ${next} theme`
+  const { theme, setTheme } = useTheme()
+  const options: ThemePreference[] = ['light', 'dark', 'system']
 
   return (
-    <button
-      type="button"
-      onClick={() => setTheme(next)}
-      aria-label={label}
-      title={label}
-      className={`inline-flex items-center justify-center rounded-md border border-line text-muted transition hover:bg-elevated hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-        compact ? 'h-8 w-8' : 'h-9 gap-2 px-3 text-sm'
-      }`}
+    <div
+      role="radiogroup"
+      aria-label="Color theme"
+      className={`inline-flex rounded-md border border-line p-0.5 ${compact ? '' : ''}`}
     >
-      {resolved === 'dark' ? <SunIcon /> : <MoonIcon />}
-      {!compact && <span>{resolved === 'dark' ? 'Light' : 'Dark'}</span>}
-    </button>
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="radio"
+          aria-checked={theme === option}
+          aria-label={`Use ${option} theme`}
+          className={`rounded px-2 py-1 text-xs font-medium capitalize transition ${
+            theme === option ? 'bg-accent-soft text-accent' : 'text-muted hover:text-ink'
+          }`}
+          onClick={() => setTheme(option)}
+        >
+          {compact ? option[0].toUpperCase() : option}
+        </button>
+      ))}
+    </div>
   )
 }

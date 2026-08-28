@@ -22,7 +22,7 @@ describe('theme toggle', () => {
     document.documentElement.classList.remove('dark', 'light')
   })
 
-  it('switches between light and dark and persists the choice', () => {
+  it('switches between light, dark, and system and persists the choice', () => {
     localStorage.setItem(THEME_STORAGE_KEY, 'light')
     container = document.createElement('div')
     document.body.appendChild(container)
@@ -36,15 +36,23 @@ describe('theme toggle', () => {
       )
     })
 
-    const button = container.querySelector('button[aria-label="Switch to dark theme"]')
-    expect(button).not.toBeNull()
+    const dark = container.querySelector('button[aria-label="Use dark theme"]')
+    expect(dark).not.toBeNull()
+    expect(container.querySelector('button[aria-label="Use light theme"]')).not.toBeNull()
+    expect(container.querySelector('button[aria-label="Use system theme"]')).not.toBeNull()
 
     act(() => {
-      button!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      dark!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(container.querySelector('button[aria-label="Switch to light theme"]')).not.toBeNull()
+    expect(container.querySelector('button[aria-label="Use dark theme"]')?.getAttribute('aria-checked')).toBe('true')
+
+    const system = container.querySelector('button[aria-label="Use system theme"]')
+    act(() => {
+      system!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('system')
   })
 })

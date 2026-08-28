@@ -2,6 +2,12 @@ import { FormEvent, useCallback, useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
 import { confirmDelete } from './confirm'
+import { breadcrumbsFor } from './layout/navigation'
+import { CopyText } from './ui/copy'
+import { EmptyState, PageHeader } from './ui/page'
+import { FilterBar, Table, TableFrame, THead, Td, filterInputClass } from './ui/table'
+import { RelativeTime } from './ui/time'
+import { toast } from './ui/toast'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -100,11 +106,12 @@ export function DhcpPanel() {
     e.preventDefault(); setSvrErr('')
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name: svrName, host: svrHost, description: svrDesc || null }) })
     const data = await r.json()
-    if (!r.ok) { setSvrErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setSvrErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setServers((p) => [...p, data]); setSvrName(''); setSvrHost(''); setSvrDesc(''); setShowServerForm(false)
+    toast.ok('DHCP server added')
   }
   const handleDeleteServer = async (id: number, name: string) => {
-    if (!confirmDelete(`DHCP server "${name}"`)) return
+    if (!(await confirmDelete(`DHCP server "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) { setServers((p) => p.filter((s) => s.id !== id)); if (selected?.id === id) { setSelected(null); setSelectedPool(null) } }
   }
@@ -114,14 +121,15 @@ export function DhcpPanel() {
     if (!selected) return; e.preventDefault(); setPErr('')
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ subnet: pSubnet, range_start: pStart, range_end: pEnd, gateway: pGateway || null, dns_servers: pDns || null, lease_time: Number(pLease) || 86400, description: pDesc || null }) })
     const data = await r.json()
-    if (!r.ok) { setPErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setPErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setServers((prev) => prev.map((s) => s.id === selected.id ? { ...s, pools: [...s.pools, data] } : s))
     setSelected((s) => s ? { ...s, pools: [...s.pools, data] } : s)
+    toast.ok('Pool created')
     setPSubnet(''); setPStart(''); setPEnd(''); setPGateway(''); setPDns(''); setPLease('86400'); setPDesc(''); setShowPoolForm(false)
   }
   const handleDeletePool = async (poolId: number, subnet: string) => {
     if (!selected) return
-    if (!confirmDelete(`DHCP pool ${subnet}`)) return
+    if (!(await confirmDelete(`DHCP pool ${subnet}`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${poolId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) {
       setServers((prev) => prev.map((s) => s.id === selected.id ? { ...s, pools: s.pools.filter((p) => p.id !== poolId) } : s))
@@ -146,13 +154,14 @@ export function DhcpPanel() {
     if (!selected || !selectedPool) return; e.preventDefault(); setLErr('')
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/leases`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ ip_address: lIp, mac_address: lMac, hostname: lHost || null, status: 'active' }) })
     const data = await r.json()
-    if (!r.ok) { setLErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setLErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setLIp(''); setLMac(''); setLHost(''); setShowLeaseForm(false)
+    toast.ok('Lease added')
     refreshPool(selected, selectedPool)
   }
   const handleDeleteLease = async (leaseId: number, address: string) => {
     if (!selected || !selectedPool) return
-    if (!confirmDelete(`lease ${address}`)) return
+    if (!(await confirmDelete(`lease ${address}`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/leases/${leaseId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) refreshPool(selected, selectedPool)
   }
@@ -162,13 +171,14 @@ export function DhcpPanel() {
     if (!selected || !selectedPool) return; e.preventDefault(); setResErr('')
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/reservations`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ ip_address: resIp, mac_address: resMac, hostname: resHost || null, description: resDesc || null }) })
     const data = await r.json()
-    if (!r.ok) { setResErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setResErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setResIp(''); setResMac(''); setResHost(''); setResDesc(''); setShowResForm(false)
+    toast.ok('Reservation added')
     refreshPool(selected, selectedPool)
   }
   const handleDeleteReservation = async (resId: number, address: string) => {
     if (!selected || !selectedPool) return
-    if (!confirmDelete(`reservation ${address}`)) return
+    if (!(await confirmDelete(`reservation ${address}`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/reservations/${resId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) refreshPool(selected, selectedPool)
   }
@@ -187,6 +197,7 @@ export function DhcpPanel() {
     const data = await r.json()
     if (!r.ok) { setBulkMsg(typeof data.detail === 'string' ? data.detail : 'Import failed'); return }
     setBulkMsg(`Imported ${data.added} new and updated ${data.updated} leases`)
+    toast.ok(`Imported ${data.added} leases`)
     setBulkText(''); setShowBulk(false)
     refreshPool(selected, selectedPool)
   }
@@ -206,11 +217,7 @@ export function DhcpPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / DHCP</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">DHCP Management</h2>
-        <p className="mt-2 text-muted">Track DHCP servers, address pools, active leases, and static reservations.</p>
-      </div>
+      <PageHeader crumbs={breadcrumbsFor('/dhcp')} title="DHCP Management" description="Track DHCP servers, address pools, active leases, and static reservations." />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* left: server + pool tree */}
@@ -234,7 +241,7 @@ export function DhcpPanel() {
 
           <div className="space-y-2">
             {servers.length === 0 ? (
-              <p className="rounded-2xl border border-line bg-surface p-4 text-center text-sm text-muted">No DHCP servers yet.</p>
+              <EmptyState title="No DHCP servers yet" body="Add a server to track pools, leases, and reservations." />
             ) : servers.map((svr) => (
               <div key={svr.id} className="rounded-2xl border border-line bg-surface">
                 <div
@@ -255,7 +262,7 @@ export function DhcpPanel() {
                     {svr.pools.map((pool) => (
                       <div key={pool.id} role="button" tabIndex={0} onClick={() => handleSelectPool(pool)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectPool(pool) }} className={`group flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${selectedPool?.id === pool.id ? 'bg-warn/15 text-warn' : 'text-muted hover:bg-elevated'}`}>
                         <div>
-                          <div className="font-mono text-xs font-semibold">{pool.subnet}</div>
+                          <div className="font-mono text-xs font-semibold"><CopyText value={pool.subnet} label="pool subnet" /></div>
                           <div className="text-[10px] text-muted">{pool.leases.filter(l => l.status === 'active').length} active leases</div>
                         </div>
                         <button type="button" onClick={(e) => { e.stopPropagation(); handleDeletePool(pool.id, pool.subnet) }} className="hidden text-[10px] text-danger group-hover:block">✕</button>
@@ -303,7 +310,7 @@ export function DhcpPanel() {
               {/* pool summary */}
               <div className={`${card} grid gap-4 md:grid-cols-2`}>
                 <div>
-                  <div className="font-mono text-xl font-bold text-ink">{selectedPool.subnet}</div>
+                  <div className="font-mono text-xl font-bold text-ink"><CopyText value={selectedPool.subnet} label="pool subnet" /></div>
                   <div className="mt-1 text-xs text-muted">Range: {selectedPool.range_start} – {selectedPool.range_end}</div>
                   {selectedPool.gateway && <div className="font-mono text-xs text-muted">GW: {selectedPool.gateway}</div>}
                   {selectedPool.dns_servers && <div className="font-mono text-xs text-muted">DNS: {selectedPool.dns_servers}</div>}
@@ -364,11 +371,11 @@ export function DhcpPanel() {
                       {selectedPool.leases.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-muted">No leases.</td></tr>
                         : selectedPool.leases.map((l) => (
                           <tr key={l.id} className="hover:bg-elevated/70">
-                            <td className="px-3 py-3 font-mono text-ink">{l.ip_address}</td>
-                            <td className="px-3 py-3 font-mono text-muted">{l.mac_address}</td>
+                            <td className="px-3 py-3"><CopyText value={l.ip_address} label="lease IP" className="text-ink" /></td>
+                            <td className="px-3 py-3"><CopyText value={l.mac_address} label="MAC" className="text-muted" /></td>
                             <td className="px-3 py-3 text-ink">{l.hostname ?? '—'}</td>
                             <td className="px-3 py-3"><LeaseBadge s={l.status} /></td>
-                            <td className="px-3 py-3 text-[11px] text-muted">{l.lease_end ? new Date(l.lease_end).toLocaleString() : '—'}</td>
+                            <td className="px-3 py-3 text-[11px] text-muted"><RelativeTime value={l.lease_end} /></td>
                             <td className="px-3 py-3 text-right space-x-2">
                               <button onClick={() => handlePromote(l.id)} disabled={promoting === l.id} className="rounded-xl border border-warn/30 bg-warn/10 px-2 py-1 text-[10px] text-warn hover:bg-warn/20 disabled:opacity-60">
                                 {promoting === l.id ? '…' : 'Reserve'}
@@ -392,8 +399,8 @@ export function DhcpPanel() {
                       {selectedPool.reservations.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">No reservations. Use "Reserve" on a lease or add one manually.</td></tr>
                         : selectedPool.reservations.map((res) => (
                           <tr key={res.id} className="hover:bg-elevated/70">
-                            <td className="px-3 py-3 font-mono text-ink">{res.ip_address}</td>
-                            <td className="px-3 py-3 font-mono text-muted">{res.mac_address}</td>
+                            <td className="px-3 py-3"><CopyText value={res.ip_address} label="reservation IP" className="text-ink" /></td>
+                            <td className="px-3 py-3"><CopyText value={res.mac_address} label="MAC" className="text-muted" /></td>
                             <td className="px-3 py-3 text-ink">{res.hostname ?? '—'}</td>
                             <td className="px-3 py-3 text-muted">{res.description ?? '—'}</td>
                             <td className="px-3 py-3 text-right"><button onClick={() => handleDeleteReservation(res.id, res.ip_address)} className="rounded-xl border border-danger/30 bg-danger/10 px-2 py-1 text-[10px] text-danger hover:bg-danger/20">✕</button></td>
@@ -411,25 +418,27 @@ export function DhcpPanel() {
             <div className={card}>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h3 className="text-base font-semibold text-ink">All leases</h3>
-                <input value={leaseFilter} onChange={(e) => setLeaseFilter(e.target.value)} placeholder="Filter IP, MAC, hostname…" className="w-56 rounded-2xl border border-line bg-canvas px-3 py-2 text-sm text-ink outline-none focus:border-accent" />
               </div>
-              <div className="overflow-x-auto rounded-2xl border border-line">
-                <table className="min-w-full divide-y divide-line text-left text-sm">
-                  <thead className="bg-canvas/80 text-muted"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Last seen</th></tr></thead>
+              <FilterBar>
+                <input value={leaseFilter} onChange={(e) => setLeaseFilter(e.target.value)} placeholder="Filter IP, MAC, hostname…" className={filterInputClass()} />
+              </FilterBar>
+              <TableFrame>
+                <Table>
+                  <THead><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Last seen</th></tr></THead>
                   <tbody className="divide-y divide-line bg-surface/70">
-                    {filteredAllLeases.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-muted">{allLeases.length === 0 ? 'No leases recorded yet.' : 'No matches.'}</td></tr>
+                    {filteredAllLeases.length === 0 ? <tr><td colSpan={5} className="px-3 py-8"><EmptyState title={allLeases.length === 0 ? 'No leases recorded yet' : 'No matches'} /></td></tr>
                       : filteredAllLeases.map((l) => (
                         <tr key={l.id} className="hover:bg-elevated/70">
-                          <td className="px-3 py-3 font-mono text-ink">{l.ip_address}</td>
-                          <td className="px-3 py-3 font-mono text-muted">{l.mac_address}</td>
-                          <td className="px-3 py-3 text-ink">{l.hostname ?? '—'}</td>
-                          <td className="px-3 py-3"><LeaseBadge s={l.status} /></td>
-                          <td className="px-3 py-3 text-[11px] text-muted">{l.last_seen_at ? new Date(l.last_seen_at).toLocaleString() : '—'}</td>
+                          <Td><CopyText value={l.ip_address} label="lease IP" className="text-ink" /></Td>
+                          <Td><CopyText value={l.mac_address} label="MAC" className="text-muted" /></Td>
+                          <Td className="text-ink">{l.hostname ?? '—'}</Td>
+                          <Td><LeaseBadge s={l.status} /></Td>
+                          <Td className="text-[11px] text-muted"><RelativeTime value={l.last_seen_at} /></Td>
                         </tr>
                       ))}
                   </tbody>
-                </table>
-              </div>
+                </Table>
+              </TableFrame>
             </div>
           )}
         </div>

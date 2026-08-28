@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { apiFetch } from './api/client'
 import { NAV_GROUPS } from './layout/navigation'
+import { RelativeTime } from './ui/time'
 
 type AuthUser = {
   email: string
@@ -22,6 +23,8 @@ type Stats = {
   audit: { id: number; action: string; resource: string; success: boolean; created_at: string }[]
 }
 
+type Attention = { id: string; title: string; detail: string; to: string; tone: 'danger' | 'warn' }
+
 const GROUP_STATS: Record<string, (stats: Stats) => string> = {
   network: (stats) => `${stats.ipam.total_subnets} subnets · ${stats.dns.total_zones} DNS zones · ${stats.dhcp.active_leases} leases`,
   inventory: (stats) => `${stats.inventory.active_hosts} active of ${stats.inventory.total_hosts} hosts`,
@@ -36,6 +39,51 @@ function greetingForHour(hour: number): string {
   return 'Good evening'
 }
 
+function attentionItems(stats: Stats): Attention[] {
+  const items: Attention[] = []
+  if (stats.health?.database === 'error') {
+    items.push({ id: 'db', title: 'Database unavailable', detail: 'Health check failed. Writes and lists may be stale.', to: '/', tone: 'danger' })
+  }
+  if ((stats.pki?.expiring_30d ?? 0) > 0) {
+    items.push({
+      id: 'certs',
+      title: `${stats.pki!.expiring_30d} certificates expire within 30 days`,
+      detail: 'Open PKI with the 30-day filter applied.',
+      to: '/pki?expiry=30',
+      tone: 'warn',
+    })
+  }
+  if (stats.inventory.unknown_hosts > 0) {
+    items.push({
+      id: 'unknown',
+      title: `${stats.inventory.unknown_hosts} unknown hosts`,
+      detail: 'Review discovered devices that still need a role or status.',
+      to: '/inventory?status=unknown',
+      tone: 'warn',
+    })
+  }
+  const failed = stats.audit.filter((item) => !item.success)
+  if (failed.length > 0) {
+    items.push({
+      id: 'audit',
+      title: `${failed.length} failed audit events in the latest feed`,
+      detail: failed[0].action,
+      to: '/settings?tab=audit&success=false',
+      tone: 'danger',
+    })
+  }
+  if ((stats.ldap?.total_servers ?? 0) > (stats.ldap?.last_ok ?? 0)) {
+    items.push({
+      id: 'ldap',
+      title: 'A directory last tested unhealthy',
+      detail: `${stats.ldap?.last_ok ?? 0} of ${stats.ldap?.total_servers ?? 0} directories reported ok.`,
+      to: '/ldap',
+      tone: 'warn',
+    })
+  }
+  return items
+}
+
 export function Dashboard({
   user,
   canAccess,
@@ -46,12 +94,19 @@ export function Dashboard({
   const name = user.full_name || user.username || 'Operator'
   const greeting = useMemo(() => greetingForHour(new Date().getHours()), [])
   const [stats, setStats] = useState<Stats | null>(null)
+  const [loadError, setLoadError] = useState('')
 
   const loadStats = useCallback(() => {
+    setLoadError('')
     apiFetch('/api/v1/dashboard/stats')
-      .then((response) => response.json())
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Unable to load dashboard stats')
+        }
+        return response.json()
+      })
       .then(setStats)
-      .catch(() => undefined)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : 'Unable to load dashboard stats'))
   }, [])
 
   useEffect(() => {
@@ -70,15 +125,44 @@ export function Dashboard({
 
   const kpis = stats
     ? [
-        { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active` },
-        { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned` },
-        { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones` },
-        { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static` },
+        {
+          label: 'Hosts',
+          value: stats.inventory.total_hosts,
+          sub: `${stats.inventory.active_hosts} active`,
+          to: '/inventory',
+          emptyTo: '/inventory',
+          emptyLabel: 'Add a host',
+        },
+        {
+          label: 'Subnets',
+          value: stats.ipam.total_subnets,
+          sub: `${stats.ipam.assigned_ips} IPs assigned`,
+          to: '/ipam/subnets',
+          emptyTo: '/ipam',
+          emptyLabel: 'Add a subnet',
+        },
+        {
+          label: 'DNS records',
+          value: stats.dns.total_records,
+          sub: `${stats.dns.total_zones} zones`,
+          to: '/dns',
+          emptyTo: '/dns',
+          emptyLabel: 'Add a zone',
+        },
+        {
+          label: 'DHCP leases',
+          value: stats.dhcp.active_leases,
+          sub: `${stats.dhcp.total_reservations} static`,
+          to: '/dhcp',
+          emptyTo: '/dhcp',
+          emptyLabel: 'Open DHCP',
+        },
       ]
     : []
 
   const databaseError = stats?.health?.database === 'error'
   const healthLabel = databaseError ? 'Database unavailable' : stats ? 'API healthy' : 'Checking health…'
+  const alerts = stats ? attentionItems(stats) : []
 
   return (
     <section className="space-y-8">
@@ -97,11 +181,11 @@ export function Dashboard({
             <div className="flex flex-wrap items-center gap-3">
               <div
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
-                  databaseError ? 'border-danger/30 bg-danger/10 text-danger' : 'border-ok/30 bg-ok/10 text-ok'
+                  databaseError || loadError ? 'border-danger/30 bg-danger/10 text-danger' : 'border-ok/30 bg-ok/10 text-ok'
                 }`}
               >
-                <span className={`h-2 w-2 rounded-full ${databaseError ? 'bg-danger' : 'animate-pulse bg-ok'}`} />
-                {healthLabel}
+                <span className={`h-2 w-2 rounded-full ${databaseError || loadError ? 'bg-danger' : 'animate-pulse bg-ok'}`} />
+                {loadError || healthLabel}
               </div>
               <button type="button" onClick={loadStats} className="nx-btn-ghost px-3 py-1.5 text-xs">
                 Refresh
@@ -110,15 +194,54 @@ export function Dashboard({
           </div>
         </div>
 
+        {loadError && (
+          <div className="border-b border-danger/30 bg-danger/10 px-6 py-3 text-sm text-danger">
+            {loadError}. <button type="button" className="underline" onClick={loadStats}>Retry</button>
+          </div>
+        )}
+
+        {alerts.length > 0 && (
+          <div className="border-b border-line bg-surface px-6 py-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-faint">Needs attention</p>
+            <ul className="mt-3 space-y-2">
+              {alerts.map((alert) => (
+                <li key={alert.id}>
+                  <Link
+                    to={alert.to}
+                    className={`flex items-start justify-between gap-3 rounded-xl border px-3 py-2.5 ${
+                      alert.tone === 'danger' ? 'border-danger/30 bg-danger/10' : 'border-warn/30 bg-warn/10'
+                    }`}
+                  >
+                    <span>
+                      <span className={`block text-sm font-medium ${alert.tone === 'danger' ? 'text-danger' : 'text-warn'}`}>{alert.title}</span>
+                      <span className="block text-xs text-muted">{alert.detail}</span>
+                    </span>
+                    <span className="text-xs text-faint">Open →</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-px bg-line lg:grid-cols-4">
           {stats === null
             ? [0, 1, 2, 3].map((index) => <div key={index} className="h-28 animate-pulse bg-surface" />)
             : kpis.map((kpi) => (
-                <div key={kpi.label} className="bg-surface px-6 py-5">
+                <Link key={kpi.label} to={kpi.value === 0 ? kpi.emptyTo : kpi.to} className="bg-surface px-6 py-5 transition hover:bg-accent-soft/50">
                   <p className="text-xs font-medium uppercase tracking-[0.14em] text-faint">{kpi.label}</p>
-                  <p className="mt-2 text-3xl font-semibold tabular-nums text-ink">{kpi.value}</p>
-                  <p className="mt-1 text-xs text-muted">{kpi.sub}</p>
-                </div>
+                  {kpi.value === 0 ? (
+                    <>
+                      <p className="mt-2 text-lg font-semibold text-ink">{kpi.emptyLabel}</p>
+                      <p className="mt-1 text-xs text-muted">Nothing registered yet</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-3xl font-semibold tabular-nums text-ink">{kpi.value}</p>
+                      <p className="mt-1 text-xs text-muted">{kpi.sub}</p>
+                    </>
+                  )}
+                </Link>
               ))}
         </div>
       </div>
@@ -131,9 +254,7 @@ export function Dashboard({
                 <h2 id={`dash-${group.id}`} className="text-sm font-semibold text-ink">
                   {group.label}
                 </h2>
-                {stats && GROUP_STATS[group.id] && (
-                  <p className="text-xs text-muted">{GROUP_STATS[group.id](stats)}</p>
-                )}
+                {stats && GROUP_STATS[group.id] && <p className="text-xs text-muted">{GROUP_STATS[group.id](stats)}</p>}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 {group.items.map((item) => (
@@ -161,7 +282,7 @@ export function Dashboard({
             <h2 id="recent-activity-heading" className="text-sm font-semibold text-ink">
               Recent activity
             </h2>
-            <Link to="/settings" className="text-xs font-medium text-muted transition hover:text-accent">
+            <Link to="/settings?tab=audit" className="text-xs font-medium text-muted transition hover:text-accent">
               View all
             </Link>
           </div>
@@ -179,7 +300,7 @@ export function Dashboard({
                     </span>
                   </div>
                   <p className="mt-0.5 text-xs text-muted">{log.resource}</p>
-                  <p className="mt-1 text-[11px] text-faint">{new Date(log.created_at).toLocaleString()}</p>
+                  <RelativeTime value={log.created_at} className="mt-1 block text-[11px] text-faint" />
                 </li>
               ))
             )}

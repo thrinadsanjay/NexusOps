@@ -2,6 +2,9 @@ import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
+import { breadcrumbsFor } from './layout/navigation'
+import { PageHeader } from './ui/page'
+import { toast } from './ui/toast'
 
 type Tool = {
   id: string
@@ -80,6 +83,8 @@ export function ToolsPanel() {
       const data = await r.json()
       setTestResults((p) => ({ ...p, [serverName]: data.status === 'ok' ? 'ok' : `error: ${data.message}` }))
       setLdapServers((p) => p.map((s) => s.id === serverId ? { ...s, last_test_status: data.status } : s))
+      if (data.status === 'ok') toast.ok(`${serverName} is online`)
+      else toast.error(data.message ?? 'LDAP test failed')
     } finally { setTesting(null) }
   }
 
@@ -87,11 +92,7 @@ export function ToolsPanel() {
 
   return (
     <section className="space-y-8">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">NexusOps · Integrations</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Tools & Integrations</h2>
-        <p className="mt-2 text-muted">All bundled services and external tools accessible from one place.</p>
-      </div>
+      <PageHeader crumbs={breadcrumbsFor('/tools')} title="Tools & Integrations" description="All bundled services and external tools accessible from one place." />
 
       {ldapServers.length > 0 && (
         <div>

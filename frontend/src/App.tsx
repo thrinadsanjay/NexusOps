@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useSearchParams } from 'react-router-dom'
 import { apiFetch, clearAuth, getToken, readStoredUser, storeAuth } from './api/client'
 import { Dashboard } from './Dashboard'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
@@ -12,6 +12,12 @@ import { ToolsPanel } from './Tools'
 import { AppShell } from './layout/AppShell'
 import { LoginPage } from './layout/LoginPage'
 import { ThemeProvider } from './theme'
+import { ConfirmHost } from './ui/confirm-dialog'
+import { CopyText } from './ui/copy'
+import { EmptyState, PageHeader } from './ui/page'
+import { FilterBar, Table, TableFrame, THead, filterInputClass, filterSelectClass } from './ui/table'
+import { RelativeTime } from './ui/time'
+import { ToastHost, toast } from './ui/toast'
 
 type AuthUser = {
   id: number
@@ -101,6 +107,8 @@ function hasPermission(user: AuthUser | null, permission: string | null): boolea
 export default function App() {
   return (
     <ThemeProvider>
+      <ToastHost />
+      <ConfirmHost />
       <AppRoutes />
     </ThemeProvider>
   )
@@ -238,8 +246,11 @@ function AppRoutes() {
       }
 
       setUsers((currentUsers) => [data, ...currentUsers])
+      toast.ok(`Created user ${payload.username}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to create user')
+      const message = err instanceof Error ? err.message : 'Unable to create user'
+      setError(message)
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -266,6 +277,7 @@ function AppRoutes() {
     }
 
     setSettings((currentSettings) => ({ ...currentSettings, [key]: value }))
+    toast.ok(`Saved ${key}`)
   }
 
   const handleCreateToken = async (name: string, expiresDays: number) => {
@@ -301,6 +313,7 @@ function AppRoutes() {
       ...currentTokens,
     ])
 
+    toast.ok('API token created')
     return data.token as string
   }
 
@@ -310,6 +323,7 @@ function AppRoutes() {
       throw new Error('Unable to revoke token')
     }
     setApiTokens((current) => current.map((item) => (item.id === tokenId ? { ...item, is_active: false } : item)))
+    toast.ok('Token revoked')
   }
 
   const handleChangePassword = async (currentPassword: string, newPassword: string) => {
@@ -335,6 +349,7 @@ function AppRoutes() {
     setUsers((current) =>
       current.map((item) => (item.id === userId ? { ...item, role_names: assigned.map((role) => role.name) } : item)),
     )
+    toast.ok('Roles updated')
   }
 
   const handleSaveRolePermissions = async (roleId: number, permissionIds: number[]) => {
@@ -347,6 +362,7 @@ function AppRoutes() {
     }
     const updated = (await response.json()) as Role
     setRoles((current) => current.map((role) => (role.id === roleId ? updated : role)))
+    toast.ok('Permissions saved')
   }
 
   const canWriteRoles = hasPermission(user, 'roles:write')
@@ -438,57 +454,54 @@ function UsersPanel({
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Access control</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Users</h2>
-        </div>
-        <div className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-muted">
-          {users.length} total accounts
-        </div>
-      </div>
+      <PageHeader
+        crumbs={[{ label: 'Overview', to: '/' }, { label: 'Identity' }, { label: 'Users', to: '/users' }]}
+        title="Users"
+        description="Local NexusOps accounts and role assignment."
+        actions={<span className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-muted">{users.length} accounts</span>}
+      />
 
       {canWrite && (
       <form onSubmit={handleSubmit} className="grid gap-4 rounded-2xl border border-line bg-surface p-5 shadow-card md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-ink">Email</label>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input value={email} onChange={(event) => setEmail(event.target.value)} className="nx-input" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-ink">Username</label>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input value={username} onChange={(event) => setUsername(event.target.value)} className="nx-input" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-ink">Full name</label>
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="nx-input" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-ink">Password</label>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="nx-input" />
         </div>
         <div className="md:col-span-2 flex justify-end">
-          <button type="submit" className="rounded-2xl bg-accent px-5 py-2.5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90">Create user</button>
+          <button type="submit" className="nx-btn-primary">Create user</button>
         </div>
       </form>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
-        <table className="min-w-full divide-y divide-line text-left text-sm">
-          <thead className="bg-canvas/80 text-muted">
+      {users.length === 0 ? (
+        <EmptyState title="No users yet" body="Create the first local account to share this control plane." />
+      ) : (
+      <>
+      <FilterBar />
+      <TableFrame>
+        <Table>
+          <THead>
             <tr>
               <th className="px-4 py-3 font-medium">User</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">Role</th>
               <th className="px-4 py-3 font-medium">Created</th>
             </tr>
-          </thead>
+          </THead>
           <tbody className="divide-y divide-line bg-surface/70">
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted">No users yet.</td>
-              </tr>
-            ) : (
-              users.map((userRecord) => (
+            {users.map((userRecord) => (
                 <tr key={userRecord.id} className="hover:bg-elevated/70">
                   <td className="px-4 py-4">
                     <div className="font-medium text-ink">{userRecord.full_name || userRecord.username}</div>
@@ -519,13 +532,14 @@ function UsersPanel({
                       </select>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-muted">{new Date(userRecord.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-4 text-muted"><RelativeTime value={userRecord.created_at} /></td>
                 </tr>
-              ))
-            )}
+            ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableFrame>
+      </>
+      )}
     </section>
   )
 }
@@ -543,11 +557,11 @@ function RolesPanel({
 }) {
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Role engine</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Roles</h2>
-        <p className="mt-2 text-muted">Permission groups configured for the platform.</p>
-      </div>
+      <PageHeader
+        crumbs={[{ label: 'Overview', to: '/' }, { label: 'Identity' }, { label: 'Roles', to: '/roles' }]}
+        title="Roles"
+        description="Permission groups configured for the platform."
+      />
 
       <div className="grid gap-5 md:grid-cols-2">
         {roles.length === 0 ? (
@@ -619,6 +633,14 @@ function SettingsPanel({
   onRevokeToken: (tokenId: number) => Promise<void>
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }) {
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') || 'platform'
+  const setTab = (next: string) => {
+    const copy = new URLSearchParams(params)
+    copy.set('tab', next)
+    setParams(copy, { replace: true })
+  }
+
   const [key, setKey] = useState('app_name')
   const [value, setValue] = useState('NexusOps')
   const [description, setDescription] = useState('Platform display name')
@@ -628,13 +650,20 @@ function SettingsPanel({
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [passwordMessage, setPasswordMessage] = useState('')
+  const [auditQuery, setAuditQuery] = useState('')
+  const [auditSuccess, setAuditSuccess] = useState(params.get('success') ?? '')
+  const [auditRange, setAuditRange] = useState('all')
+
+  useEffect(() => {
+    const success = params.get('success')
+    if (success !== null) {
+      setAuditSuccess(success)
+    }
+  }, [params])
 
   const handleSettingSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!key || !value) {
-      return
-    }
-
+    if (!key || !value) return
     await onSaveSetting(key, value, description)
     setKey('')
     setValue('')
@@ -643,10 +672,7 @@ function SettingsPanel({
 
   const handleTokenSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!tokenName) {
-      return
-    }
-
+    if (!tokenName) return
     const token = await onCreateToken(tokenName, expiresDays)
     setNewToken(token ?? '')
     setTokenName('')
@@ -659,151 +685,211 @@ function SettingsPanel({
     try {
       await onChangePassword(currentPassword, newPassword)
       setPasswordMessage('Password updated')
+      toast.ok('Password updated')
       setCurrentPassword('')
       setNewPassword('')
     } catch (err) {
-      setPasswordMessage(err instanceof Error ? err.message : 'Unable to change password')
+      const message = err instanceof Error ? err.message : 'Unable to change password'
+      setPasswordMessage(message)
+      toast.error(message)
     }
   }
 
+  const filteredAudit = auditLogs.filter((log) => {
+    const q = auditQuery.toLowerCase()
+    const matchText = !q || `${log.action} ${log.resource} ${log.details ?? ''} ${log.user_id ?? ''}`.toLowerCase().includes(q)
+    const matchSuccess = auditSuccess === '' || String(log.success) === auditSuccess
+    const created = new Date(log.created_at).getTime()
+    const now = Date.now()
+    const matchRange =
+      auditRange === 'all' ||
+      (auditRange === 'today' && now - created < 86400000) ||
+      (auditRange === '7d' && now - created < 7 * 86400000) ||
+      (auditRange === '30d' && now - created < 30 * 86400000)
+    return matchText && matchSuccess && matchRange
+  })
+
+  const tabs = [
+    { id: 'platform', label: 'Platform' },
+    { id: 'tokens', label: 'API tokens' },
+    { id: 'password', label: 'Password' },
+    { id: 'audit', label: 'Audit' },
+  ]
+
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Security & controls</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Settings & access</h2>
-        <p className="mt-2 text-muted">Platform defaults, audit review, and API token management.</p>
+      <PageHeader
+        crumbs={[{ label: 'Overview', to: '/' }, { label: 'Operations' }, { label: 'Settings', to: '/settings' }]}
+        title="Settings & access"
+        description="Platform defaults, API tokens, password, and the full audit log."
+      />
+
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`rounded-full px-4 py-1.5 text-xs font-semibold ${tab === item.id ? 'bg-accent text-accent-fg' : 'bg-elevated text-muted'}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold text-ink">Update setting</h3>
-            <span className="rounded-full bg-accent/15 px-2 py-1 text-xs font-medium text-accent">Live</span>
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink">Key</label>
-            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink">Value</label>
-            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink">Description</label>
-            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          </div>
-          <button type="submit" className="rounded-2xl bg-accent px-4 py-2.5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90">Save setting</button>
-        </form>
-
-        <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-xl font-semibold text-ink">Create API token</h3>
-            <span className="rounded-full bg-accent/15 px-2 py-1 text-xs font-medium text-accent">Token</span>
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink">Token name</label>
-            <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-ink">Expires in days</label>
-            <input type="number" min={1} max={3650} value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value) || 30)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
-          </div>
-          <button type="submit" className="rounded-2xl bg-accent px-4 py-2.5 font-semibold text-accent-fg shadow-sm transition hover:opacity-90">Generate token</button>
-          {newToken && (
-            <div className="rounded-2xl border border-ok/30 bg-ok/10 p-3 text-sm text-ok break-all">
-              {newToken}
-            </div>
-          )}
-        </form>
-
-        <form onSubmit={handlePasswordSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card xl:col-span-2">
-          <h3 className="text-xl font-semibold text-ink">Change password</h3>
-          <div className="grid gap-4 md:grid-cols-2">
+      {tab === 'platform' && (
+        <div className="grid gap-6 xl:grid-cols-2">
+          <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
+            <h3 className="text-lg font-semibold text-ink">Update setting</h3>
             <div>
-              <label htmlFor="current-password" className="mb-2 block text-sm font-medium text-ink">Current password</label>
-              <input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+              <label className="mb-2 block text-sm font-medium text-ink">Key</label>
+              <input value={key} onChange={(event) => setKey(event.target.value)} className="nx-input" />
             </div>
             <div>
-              <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-ink">New password</label>
-              <input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="w-full rounded-2xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20" />
+              <label className="mb-2 block text-sm font-medium text-ink">Value</label>
+              <input value={value} onChange={(event) => setValue(event.target.value)} className="nx-input" />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-ink">Description</label>
+              <input value={description} onChange={(event) => setDescription(event.target.value)} className="nx-input" />
+            </div>
+            <button type="submit" className="nx-btn-primary">Save setting</button>
+          </form>
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+            <h3 className="text-lg font-semibold text-ink">Current settings</h3>
+            <div className="mt-4 space-y-3">
+              {Object.keys(settings).length === 0 ? (
+                <p className="text-muted">No settings available.</p>
+              ) : (
+                Object.entries(settings).map(([keyName, valueName]) => (
+                  <div key={keyName} className="rounded-2xl border border-line bg-canvas/60 p-3">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-accent">{keyName}</div>
+                    <div className="mt-2 break-all text-sm text-ink">{valueName}</div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-          <button type="submit" className="rounded-2xl border border-line bg-canvas px-4 py-2.5 font-semibold text-ink transition hover:bg-elevated">Update password</button>
+        </div>
+      )}
+
+      {tab === 'tokens' && (
+        <div className="grid gap-6 xl:grid-cols-2">
+          <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
+            <h3 className="text-lg font-semibold text-ink">Create API token</h3>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-ink">Token name</label>
+              <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} className="nx-input" />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-ink">Expires in days</label>
+              <input type="number" min={1} max={3650} value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value) || 30)} className="nx-input" />
+            </div>
+            <button type="submit" className="nx-btn-primary">Generate token</button>
+            {newToken && (
+              <div className="rounded-2xl border border-ok/30 bg-ok/10 p-3 text-sm text-ok">
+                <CopyText value={newToken} label="API token" />
+              </div>
+            )}
+          </form>
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
+            <h3 className="text-lg font-semibold text-ink">API tokens</h3>
+            <div className="mt-4 space-y-3">
+              {apiTokens.length === 0 ? (
+                <EmptyState title="No API tokens" body="Generate a token for automation and keep the secret in a vault." />
+              ) : (
+                apiTokens.map((token) => (
+                  <div key={token.id} className="rounded-2xl border border-line bg-canvas/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-ink">{token.name}</span>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${token.is_active ? 'bg-ok/15 text-ok' : 'bg-elevated text-muted'}`}>
+                        {token.is_active ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-muted">
+                      Prefix: <CopyText value={token.prefix} label="token prefix" />
+                    </div>
+                    <RelativeTime value={token.created_at} className="text-xs text-muted" />
+                    {token.is_active && (
+                      <button type="button" className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger" onClick={() => void onRevokeToken(token.id)}>
+                        Revoke
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'password' && (
+        <form onSubmit={handlePasswordSubmit} className="max-w-xl space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card">
+          <h3 className="text-lg font-semibold text-ink">Change password</h3>
+          <div>
+            <label htmlFor="current-password" className="mb-2 block text-sm font-medium text-ink">Current password</label>
+            <input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} className="nx-input" />
+          </div>
+          <div>
+            <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-ink">New password</label>
+            <input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="nx-input" />
+          </div>
+          <button type="submit" className="nx-btn-primary">Update password</button>
           {passwordMessage && <p className="text-sm text-muted">{passwordMessage}</p>}
         </form>
-      </div>
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
-          <h3 className="text-xl font-semibold text-ink">Current settings</h3>
-          <div className="mt-4 space-y-3">
-            {Object.keys(settings).length === 0 ? (
-              <p className="text-muted">No settings available.</p>
-            ) : (
-              Object.entries(settings).map(([keyName, valueName]) => (
-                <div key={keyName} className="rounded-2xl border border-line bg-canvas/60 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-accent">{keyName}</div>
-                  <div className="mt-2 break-all text-sm text-ink">{valueName}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
-          <h3 className="text-xl font-semibold text-ink">API tokens</h3>
-          <div className="mt-4 space-y-3">
-            {apiTokens.length === 0 ? (
-              <p className="text-muted">No API tokens created yet.</p>
-            ) : (
-              apiTokens.map((token) => (
-                <div key={token.id} className="rounded-2xl border border-line bg-canvas/60 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium text-ink">{token.name}</span>
-                    <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${token.is_active ? 'bg-ok/15 text-ok' : 'bg-elevated text-muted'}`}>
-                      {token.is_active ? 'Active' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-xs text-muted">Prefix: {token.prefix}</div>
-                  <div className="text-xs text-muted">Created: {new Date(token.created_at).toLocaleDateString()}</div>
-                  {token.is_active && (
-                    <button
-                      type="button"
-                      className="mt-3 rounded-xl border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs text-danger"
-                      onClick={() => void onRevokeToken(token.id)}
-                    >
-                      Revoke
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-line bg-surface p-5 shadow-card">
-        <h3 className="text-xl font-semibold text-ink">Audit log</h3>
-        <div className="mt-4 space-y-3">
-          {auditLogs.length === 0 ? (
-            <p className="text-muted">No audit events yet.</p>
+      {tab === 'audit' && (
+        <div className="space-y-4">
+          <FilterBar>
+            <input value={auditQuery} onChange={(event) => setAuditQuery(event.target.value)} placeholder="Filter action, resource, user id…" className={filterInputClass()} />
+            <select value={auditSuccess} onChange={(event) => setAuditSuccess(event.target.value)} className={filterSelectClass()}>
+              <option value="">All results</option>
+              <option value="true">Success</option>
+              <option value="false">Failed</option>
+            </select>
+            <select value={auditRange} onChange={(event) => setAuditRange(event.target.value)} className={filterSelectClass()}>
+              <option value="all">Any time</option>
+              <option value="today">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+          </FilterBar>
+          {filteredAudit.length === 0 ? (
+            <EmptyState title="No matching audit events" body="Try a wider time range or clear the success filter." />
           ) : (
-            auditLogs.slice(0, 10).map((log) => (
-              <div key={log.id} className="rounded-2xl border border-line bg-canvas/60 p-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-ink">{log.action}</span>
-                  <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${log.success ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>
-                    {log.success ? 'Success' : 'Failed'}
-                  </span>
-                </div>
-                <div className="mt-2 text-muted">{log.resource}</div>
-                <div className="mt-1 text-muted">{log.details || 'No details provided'}</div>
-                <div className="mt-2 text-[11px] text-faint">{new Date(log.created_at).toLocaleString()}</div>
-              </div>
-            ))
+            <TableFrame>
+              <Table>
+                <THead>
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Action</th>
+                    <th className="px-4 py-3 font-medium">Resource</th>
+                    <th className="px-4 py-3 font-medium">Result</th>
+                    <th className="px-4 py-3 font-medium">When</th>
+                  </tr>
+                </THead>
+                <tbody className="divide-y divide-line">
+                  {filteredAudit.map((log) => (
+                    <tr key={log.id} className="hover:bg-elevated/70">
+                      <td className="px-4 py-3 font-medium text-ink">{log.action}</td>
+                      <td className="px-4 py-3 text-muted">
+                        <div>{log.resource}</div>
+                        <div className="text-xs text-faint">{log.details || 'No details'}{log.user_id ? ` · user ${log.user_id}` : ''}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${log.success ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>
+                          {log.success ? 'Success' : 'Failed'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted"><RelativeTime value={log.created_at} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableFrame>
           )}
         </div>
-      </div>
+      )}
     </section>
   )
 }

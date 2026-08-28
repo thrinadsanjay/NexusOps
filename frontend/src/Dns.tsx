@@ -2,6 +2,11 @@ import { FormEvent, useCallback, useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
 import { confirmDelete } from './confirm'
+import { breadcrumbsFor } from './layout/navigation'
+import { CopyText } from './ui/copy'
+import { EmptyState, PageHeader } from './ui/page'
+import { FilterBar, Table, TableFrame, THead, Td, filterInputClass } from './ui/table'
+import { toast } from './ui/toast'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -102,13 +107,14 @@ export function DnsOverview() {
       body: JSON.stringify({ name: zoneName, kind: zoneKind, description: zoneDesc || null, default_ttl: Number(zoneTtl) || 300, status: 'active' }),
     })
     const data = await r.json()
-    if (!r.ok) { setZoneError(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setZoneError(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setZones((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
+    toast.ok(`Zone ${data.name} created`)
     setZoneName(''); setZoneDesc(''); setZoneTtl('300'); setShowZoneForm(false)
   }
 
   const handleDeleteZone = async (id: number, name: string) => {
-    if (!confirmDelete(`DNS zone "${name}"`)) return
+    if (!(await confirmDelete(`DNS zone "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) {
       setZones((p) => p.filter((z) => z.id !== id))
@@ -124,13 +130,14 @@ export function DnsOverview() {
       body: JSON.stringify({ name: recName, record_type: recType, value: recValue, ttl: recTtl ? Number(recTtl) : null, priority: recPriority ? Number(recPriority) : null, comment: recComment || null }),
     })
     const data = await r.json()
-    if (!r.ok) { setRecError(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setRecError(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setRecords((p) => [...p, data])
+    toast.ok('Record added')
     setRecName(''); setRecValue(''); setRecTtl(''); setRecPriority(''); setRecComment(''); setShowRecordForm(false)
   }
 
   const handleDeleteRecord = async (recId: number, name: string) => {
-    if (!confirmDelete(`DNS record "${name}"`)) return
+    if (!(await confirmDelete(`DNS record "${name}"`))) return
     if (!selectedZone) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${selectedZone.id}/records/${recId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setRecords((p) => p.filter((rec) => rec.id !== recId))
@@ -143,8 +150,9 @@ export function DnsOverview() {
       const r = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${selectedZone.id}/import-from-ipam`, { method: 'POST', headers: authHeaders() })
       const data = await r.json()
       setImportMsg(`${data.imported} A record${data.imported !== 1 ? 's' : ''} imported`)
+      toast.ok(`${data.imported} A records imported`)
       loadRecords(selectedZone.id)
-    } catch { setImportMsg('Import failed') }
+    } catch { setImportMsg('Import failed'); toast.error('Import failed') }
     finally { setImporting(false) }
   }
 
@@ -162,11 +170,7 @@ export function DnsOverview() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / DNS</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">DNS Management</h2>
-        <p className="mt-2 text-muted">Manage zones and records for your homelab DNS infrastructure.</p>
-      </div>
+      <PageHeader crumbs={breadcrumbsFor('/dns')} title="DNS Management" description="Manage zones and records for your homelab DNS infrastructure." />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* zone list */}
@@ -195,7 +199,7 @@ export function DnsOverview() {
 
           <div className="space-y-2">
             {zones.length === 0 ? (
-              <p className="rounded-2xl border border-line bg-surface p-4 text-center text-sm text-muted">No zones yet.</p>
+              <EmptyState title="No zones yet" body="Create a forward or reverse zone to start adding records." />
             ) : zones.map((z) => (
               <div key={z.id} role="button" tabIndex={0} onClick={() => handleSelectZone(z)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectZone(z) }}
                 className={`group w-full cursor-pointer rounded-2xl border p-3 text-left transition ${selectedZone?.id === z.id ? 'border-accent/40 bg-accent/10' : 'border-line bg-surface hover:border-accent/40'}`}>
@@ -268,34 +272,32 @@ export function DnsOverview() {
                 </form>
               )}
 
-              <div className="flex gap-3">
-                <input value={recordSearch} onChange={(e) => setRecordSearch(e.target.value)} placeholder="Search name or value…" className="flex-1 rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent" />
-              </div>
+              <FilterBar>
+                <input value={recordSearch} onChange={(e) => setRecordSearch(e.target.value)} placeholder="Search name or value…" className={filterInputClass()} />
+              </FilterBar>
 
-              <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-card">
-                <table className="min-w-full divide-y divide-line text-left text-sm">
-                  <thead className="bg-canvas/80 text-muted">
+              <TableFrame>
+                <Table>
+                  <THead>
                     <tr><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">Type</th><th className="px-4 py-3 font-medium">Value</th><th className="px-4 py-3 font-medium">TTL</th><th className="px-4 py-3 font-medium">Priority</th><th className="px-4 py-3 font-medium">Comment</th><th className="px-4 py-3" /></tr>
-                  </thead>
+                  </THead>
                   <tbody className="divide-y divide-line bg-surface/70">
                     {filteredRecords.length === 0 ? (
-                      <tr><td colSpan={7} className="px-4 py-10 text-center text-muted">
-                        {records.length === 0 ? 'No records yet. Add one or import A records from IPAM.' : 'No records match the filter.'}
-                      </td></tr>
+                      <tr><td colSpan={7} className="px-4 py-10"><EmptyState title={records.length === 0 ? 'No records yet' : 'No records match'} body={records.length === 0 ? 'Add one or import A records from IPAM.' : 'Clear the search or type filter.'} /></td></tr>
                     ) : filteredRecords.map((rec) => (
                       <tr key={rec.id} className="hover:bg-elevated/70">
-                        <td className="px-4 py-3 font-mono font-semibold text-ink">{rec.name}</td>
-                        <td className="px-4 py-3"><TypeBadge type={rec.record_type} /></td>
-                        <td className="px-4 py-3 max-w-[240px] truncate font-mono text-ink" title={rec.value}>{rec.value}</td>
-                        <td className="px-4 py-3 font-mono text-muted">{rec.ttl ?? `${selectedZone.default_ttl}*`}</td>
-                        <td className="px-4 py-3 text-muted">{rec.priority ?? '—'}</td>
-                        <td className="px-4 py-3 text-muted">{rec.comment ?? '—'}</td>
-                        <td className="px-4 py-3 text-right"><button onClick={() => handleDeleteRecord(rec.id, rec.name)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger hover:bg-danger/20">Delete</button></td>
+                        <Td className="font-mono font-semibold text-ink">{rec.name}</Td>
+                        <Td><TypeBadge type={rec.record_type} /></Td>
+                        <Td className="max-w-[240px]"><CopyText value={rec.value} label="record value" className="text-ink" /></Td>
+                        <Td className="font-mono text-muted">{rec.ttl ?? `${selectedZone.default_ttl}*`}</Td>
+                        <Td className="text-muted">{rec.priority ?? '—'}</Td>
+                        <Td className="text-muted">{rec.comment ?? '—'}</Td>
+                        <Td className="text-right"><button onClick={() => handleDeleteRecord(rec.id, rec.name)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger hover:bg-danger/20">Delete</button></Td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
+                </Table>
+              </TableFrame>
             </>
           )}
         </div>

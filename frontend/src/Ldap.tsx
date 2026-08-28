@@ -2,6 +2,12 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
 import { confirmDelete } from './confirm'
+import { breadcrumbsFor } from './layout/navigation'
+import { CopyText } from './ui/copy'
+import { EmptyState, PageHeader } from './ui/page'
+import { FilterBar, Table, TableFrame, THead, Td, filterInputClass, filterSelectClass } from './ui/table'
+import { RelativeTime } from './ui/time'
+import { toast } from './ui/toast'
 
 export type LdapServer = {
   id: number; name: string; host: string; port: number; use_ssl: boolean; use_tls: boolean
@@ -29,6 +35,8 @@ export type DirectoryOu = { dn: string; name: string; description: string | null
 export type TreeNode = { dn: string; name: string; kind: string }
 
 type Tab = 'users' | 'groups' | 'ous' | 'tree' | 'sync'
+
+const LDAP_SERVER_KEY = 'nexusops-ldap-server'
 
 const TEST_BADGE: Record<string, string> = {
   ok: 'bg-ok/15 text-ok border-ok/30',
@@ -85,7 +93,16 @@ export function LdapPanel() {
       .then((r) => r.json()).then((data) => {
         const list = Array.isArray(data) ? data : []
         setServers(list)
-        setSelected((current) => current ? list.find((item: LdapServer) => item.id === current.id) ?? current : current)
+        setSelected((current) => {
+          if (current) return list.find((item: LdapServer) => item.id === current.id) ?? list[0] ?? null
+          let stored = 0
+          try {
+            stored = Number(localStorage.getItem(LDAP_SERVER_KEY) || '')
+          } catch {
+            stored = 0
+          }
+          return list.find((item: LdapServer) => item.id === stored) ?? list[0] ?? null
+        })
       }).catch(() => undefined)
   }, [])
 
@@ -96,6 +113,16 @@ export function LdapPanel() {
 
   useEffect(() => { loadServers() }, [loadServers])
   useEffect(() => { if (selected) loadSyncLogs(selected.id) }, [selected, loadSyncLogs])
+
+  const selectServer = (server: LdapServer | null) => {
+    setSelected(server)
+    try {
+      if (server) localStorage.setItem(LDAP_SERVER_KEY, String(server.id))
+      else localStorage.removeItem(LDAP_SERVER_KEY)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const handleCreateServer = async (e: FormEvent) => {
     e.preventDefault(); setFErr('')
@@ -108,15 +135,21 @@ export function LdapPanel() {
       }),
     })
     const data = await r.json()
-    if (!r.ok) { setFErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setFErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setServers((p) => [...p, data])
+    selectServer(data)
+    toast.ok('Directory added')
     setFName(''); setFHost(''); setFPort('389'); setFSsl(false); setFTls(false); setFBaseDn(''); setFBindDn(''); setFBindPw(''); setFUserBase(''); setFGroupBase(''); setFFilter('(objectClass=inetOrgPerson)'); setFAttrMap('{"username":"uid","email":"mail","full_name":"cn"}'); setFNotes(''); setShowForm(false)
   }
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirmDelete(`LDAP server "${name}"`)) return
+    if (!(await confirmDelete(`LDAP server "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/ldap/servers/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) { setServers((p) => p.filter((s) => s.id !== id)); if (selected?.id === id) setSelected(null) }
+    if (r.ok || r.status === 204) {
+      setServers((p) => p.filter((s) => s.id !== id))
+      if (selected?.id === id) selectServer(null)
+      toast.ok(`Deleted ${name}`)
+    }
   }
 
   const handleTest = async () => {
@@ -124,7 +157,10 @@ export function LdapPanel() {
     setTesting(true); setTestResult(null)
     try {
       const r = await fetch(`${API_BASE_URL}/api/v1/ldap/servers/${selected.id}/test`, { method: 'POST', headers: authHeaders() })
-      setTestResult(await r.json())
+      const result = await r.json()
+      setTestResult(result)
+      if (result.status === 'ok') toast.ok('Directory connection ok')
+      else toast.error(result.message ?? 'Directory test failed')
       loadServers()
     } finally { setTesting(false) }
   }
@@ -134,7 +170,8 @@ export function LdapPanel() {
     setSyncing(true)
     try {
       const r = await fetch(`${API_BASE_URL}/api/v1/ldap/servers/${selected.id}/sync`, { method: 'POST', headers: authHeaders() })
-      if (r.ok) { loadSyncLogs(selected.id); loadServers() }
+      if (r.ok) { loadSyncLogs(selected.id); loadServers(); toast.ok('Sync started') }
+      else toast.error('Sync failed')
     } finally { setSyncing(false) }
   }
 
@@ -148,11 +185,12 @@ export function LdapPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / Directory</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Directory Manager</h2>
-        <p className="mt-2 text-muted">Create and manage LDAP users, groups, and organizational units the same way you would in Active Directory Users and Computers.</p>
-      </div>
+      <PageHeader
+        crumbs={breadcrumbsFor('/ldap')}
+        title="Directory Manager"
+        description="Create and manage LDAP users, groups, and organizational units the same way you would in Active Directory Users and Computers."
+        actions={<button onClick={() => setShowForm((p) => !p)} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg">{showForm ? 'Cancel' : 'Add server'}</button>}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         <div className="space-y-3">
@@ -186,14 +224,14 @@ export function LdapPanel() {
           )}
 
           {servers.length === 0 ? (
-            <p className={`${card} text-center text-sm text-muted`}>No LDAP servers configured yet.</p>
+            <EmptyState title="No LDAP servers" body="Add a directory to manage users, groups, and OUs." />
           ) : servers.map((svr) => (
             <div
               key={svr.id}
               role="button"
               tabIndex={0}
-              onClick={() => setSelected(svr)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelected(svr) }}
+              onClick={() => selectServer(svr)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectServer(svr) }}
               className={`group w-full cursor-pointer rounded-2xl border p-4 text-left transition ${selected?.id === svr.id ? 'border-accent/40 bg-accent/10' : 'border-line bg-surface hover:border-accent/40'}`}
             >
               <div className="flex items-center justify-between gap-2">
@@ -207,20 +245,21 @@ export function LdapPanel() {
                     {svr.last_test_status === 'ok' ? '✓ Connected' : '✗ Error'}
                   </span>
                 )}
-                {svr.last_sync_at && <span className="text-[10px] text-faint">synced {new Date(svr.last_sync_at).toLocaleDateString()}</span>}
+                {svr.last_sync_at && <RelativeTime value={svr.last_sync_at} className="text-[10px] text-faint" />}
               </div>
             </div>
           ))}
         </div>
 
         {!selected ? (
-          <div className={`${card} flex items-center justify-center py-16 text-muted`}>Select a directory to manage users, groups, and OUs.</div>
+          <EmptyState title="Select a directory" body="Pick a server on the left to manage users, groups, and OUs." />
         ) : (
           <div className="space-y-5">
             <div className={`${card} flex flex-col gap-4 md:flex-row md:items-start md:justify-between`}>
               <div>
                 <h3 className="text-xl font-bold text-ink">{selected.name}</h3>
-                <div className="mt-1 font-mono text-sm text-muted">{selected.host}:{selected.port} · {selected.base_dn}</div>
+                <div className="mt-1 font-mono text-sm text-muted">{selected.host}:{selected.port}</div>
+                <div className="mt-1"><CopyText value={selected.base_dn} label="base DN" className="text-sm text-muted" /></div>
                 {selected.notes && <div className="mt-2 text-sm text-muted">{selected.notes}</div>}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -315,11 +354,13 @@ function UsersTab({ server }: { server: LdapServer }) {
         body: JSON.stringify({ first_name: firstName || null, last_name: lastName || null, display_name: displayName || null, email: email || null, phone: phone || null, title: title || null, department: department || null, office: office || null, enabled, member_of: memberOf }),
       })
       if (!r.ok) { setError(await readError(r, 'Unable to update user')); return }
+      toast.ok('Directory user updated')
       if (resetPw) {
         const pw = await fetch(`${base}/users/${encodeURIComponent(editing.username)}/password`, {
           method: 'POST', headers: authHeaders(), body: JSON.stringify({ password: resetPw }),
         })
         if (!pw.ok) { setError(await readError(pw, 'Unable to reset password')); return }
+        toast.ok('Password reset')
       }
     } else {
       const r = await fetch(`${base}/users`, {
@@ -327,14 +368,15 @@ function UsersTab({ server }: { server: LdapServer }) {
         body: JSON.stringify({ username, password: password || null, first_name: firstName || null, last_name: lastName || null, display_name: displayName || username, email: email || null, phone: phone || null, title: title || null, department: department || null, office: office || null, enabled, member_of: memberOf }),
       })
       if (!r.ok) { setError(await readError(r, 'Unable to create user')); return }
+      toast.ok('Directory user created')
     }
     resetForm(); load()
   }
 
   const handleDelete = async (user: DirectoryUser) => {
-    if (!confirmDelete(`directory user "${user.username}"`)) return
+    if (!(await confirmDelete(`directory user "${user.username}"`))) return
     const r = await fetch(`${base}/users/${encodeURIComponent(user.username)}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) load()
+    if (r.ok || r.status === 204) { toast.ok(`Deleted ${user.username}`); load() }
     else setError(await readError(r, 'Unable to delete user'))
   }
 
@@ -342,15 +384,15 @@ function UsersTab({ server }: { server: LdapServer }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search username, name, or email…" className="min-w-[200px] flex-1 rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent" />
-        <select value={enabledFilter} onChange={(e) => setEnabledFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink">
+      <FilterBar>
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search username, name, or email…" className={filterInputClass()} />
+        <select value={enabledFilter} onChange={(e) => setEnabledFilter(e.target.value)} className={filterSelectClass()}>
           <option value="">All accounts</option>
           <option value="true">Enabled</option>
           <option value="false">Disabled</option>
         </select>
-        <button onClick={() => { resetForm(); setShowForm(true) }} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg">{showForm && !editing ? '✕ Cancel' : '+ User'}</button>
-      </div>
+        <button onClick={() => { resetForm(); setShowForm(true) }} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg">{showForm && !editing ? 'Cancel' : 'Add user'}</button>
+      </FilterBar>
 
       {showForm && (
         <form onSubmit={handleSubmit} className={`${card} grid gap-3 md:grid-cols-2 xl:grid-cols-3`}>
@@ -385,33 +427,33 @@ function UsersTab({ server }: { server: LdapServer }) {
         </form>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
-        <table className="min-w-full divide-y divide-line text-left text-sm">
-          <thead className="bg-canvas/80 text-muted"><tr><th className="px-4 py-3 font-medium">User</th><th className="px-4 py-3 font-medium">Email</th><th className="px-4 py-3 font-medium">Title / Dept</th><th className="px-4 py-3 font-medium">Groups</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr></thead>
+      <TableFrame>
+        <Table>
+          <THead><tr><th className="px-4 py-3 font-medium">User</th><th className="px-4 py-3 font-medium">DN</th><th className="px-4 py-3 font-medium">Email</th><th className="px-4 py-3 font-medium">Groups</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3" /></tr></THead>
           <tbody className="divide-y divide-line">
             {users.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-muted">No directory users found.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10"><EmptyState title="No directory users found" body="Create a user or sync from this directory." /></td></tr>
             ) : users.map((user) => (
               <tr key={user.dn} className="hover:bg-elevated/70">
-                <td className="px-4 py-3">
+                <Td>
                   <div className="font-semibold text-ink">{user.display_name || user.username}</div>
                   <div className="font-mono text-[11px] text-muted">{user.username}</div>
-                </td>
-                <td className="px-4 py-3 text-muted">{user.email ?? '—'}</td>
-                <td className="px-4 py-3 text-muted">{[user.title, user.department].filter(Boolean).join(' · ') || '—'}</td>
-                <td className="px-4 py-3"><div className="flex flex-wrap gap-1">{user.member_of.length === 0 ? <span className="text-faint">—</span> : user.member_of.map((name) => <span key={name} className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{name}</span>)}</div></td>
-                <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${user.enabled ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>{user.enabled ? 'Enabled' : 'Disabled'}</span></td>
-                <td className="px-4 py-3 text-right">
+                </Td>
+                <Td><CopyText value={user.dn} label="user DN" className="text-[11px] text-muted" /></Td>
+                <Td className="text-muted">{user.email ?? '—'}</Td>
+                <Td><div className="flex flex-wrap gap-1">{user.member_of.length === 0 ? <span className="text-faint">—</span> : user.member_of.map((name) => <span key={name} className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{name}</span>)}</div></Td>
+                <Td><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${user.enabled ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>{user.enabled ? 'Enabled' : 'Disabled'}</span></Td>
+                <Td className="text-right">
                   <div className="flex justify-end gap-2">
                     <button onClick={() => startEdit(user)} className="rounded-xl border border-line px-3 py-1 text-xs text-muted hover:bg-elevated">Edit</button>
                     <button onClick={() => handleDelete(user)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">Delete</button>
                   </div>
-                </td>
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableFrame>
     </div>
   )
 }
@@ -452,11 +494,12 @@ function GroupsTab({ server }: { server: LdapServer }) {
       body: JSON.stringify({ name, description: description || null, members }),
     })
     if (!r.ok) { setError(await readError(r, 'Unable to create group')); return }
+    toast.ok('Group created')
     setName(''); setDescription(''); setMembers([]); setShowForm(false); load()
   }
 
   const handleDelete = async (group: DirectoryGroup) => {
-    if (!confirmDelete(`group "${group.name}"`)) return
+    if (!(await confirmDelete(`group "${group.name}"`))) return
     const r = await fetch(`${base}/groups/${encodeURIComponent(group.name)}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) { if (selected?.name === group.name) setSelected(null); load() }
     else setError(await readError(r, 'Unable to delete group'))
@@ -523,7 +566,8 @@ function GroupsTab({ server }: { server: LdapServer }) {
         <div className={`${card} space-y-4`}>
           <div>
             <h4 className="text-lg font-bold text-ink">{selected.name}</h4>
-            <p className="text-sm text-muted">{selected.description || selected.dn}</p>
+            <p className="text-sm text-muted">{selected.description || 'Directory group'}</p>
+            <div className="mt-1"><CopyText value={selected.dn} label="group DN" className="text-[11px] text-muted" /></div>
           </div>
           <form onSubmit={handleAddMember} className="flex gap-2">
             <select value={addMember} onChange={(e) => setAddMember(e.target.value)} className="flex-1 rounded-2xl border border-line bg-canvas px-3 py-2 text-sm text-ink">
@@ -540,7 +584,7 @@ function GroupsTab({ server }: { server: LdapServer }) {
               <div key={member} className="flex items-center justify-between rounded-xl border border-line bg-canvas/60 px-3 py-2">
                 <div>
                   <div className="text-sm text-ink">{memberLabel(member)}</div>
-                  <div className="font-mono text-[11px] text-faint">{member}</div>
+                  <div className="font-mono text-[11px] text-faint"><CopyText value={member} label="member DN" /></div>
                 </div>
                 <button onClick={() => handleRemoveMember(member)} className="text-xs text-danger">Remove</button>
               </div>
@@ -569,13 +613,14 @@ function OusTab({ server }: { server: LdapServer }) {
     e.preventDefault(); setError('')
     const r = await fetch(`${base}/ous`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name, parent_dn: parentDn, description: description || null }) })
     if (!r.ok) { setError(await readError(r, 'Unable to create OU')); return }
+    toast.ok('OU created')
     setName(''); setDescription(''); load()
   }
 
   const handleDelete = async (ou: DirectoryOu) => {
-    if (!confirmDelete(`organizational unit "${ou.name}"`)) return
+    if (!(await confirmDelete(`organizational unit "${ou.name}"`))) return
     const r = await fetch(`${base}/ous?dn=${encodeURIComponent(ou.dn)}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) load()
+    if (r.ok || r.status === 204) { toast.ok(`Deleted ${ou.name}`); load() }
     else setError(await readError(r, 'Unable to delete OU'))
   }
 
@@ -595,7 +640,7 @@ function OusTab({ server }: { server: LdapServer }) {
             {ous.map((ou) => (
               <tr key={ou.dn}>
                 <td className="px-4 py-3 text-ink">{ou.name}</td>
-                <td className="px-4 py-3 font-mono text-[11px] text-muted">{ou.dn}</td>
+                <td className="px-4 py-3 font-mono text-[11px] text-muted"><CopyText value={ou.dn} label="OU DN" /></td>
                 <td className="px-4 py-3 text-right"><button onClick={() => handleDelete(ou)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger">Delete</button></td>
               </tr>
             ))}
@@ -640,7 +685,7 @@ function TreeTab({ server }: { server: LdapServer }) {
           <button key={node.dn} onClick={() => node.kind === 'ou' ? load(node.dn) : undefined} className="flex w-full items-center justify-between rounded-xl border border-line bg-canvas/60 px-3 py-2 text-left">
             <div>
               <div className="text-sm text-ink">{node.name}</div>
-              <div className="font-mono text-[11px] text-faint">{node.dn}</div>
+              <div className="font-mono text-[11px] text-faint"><CopyText value={node.dn} label="entry DN" /></div>
             </div>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[10px] uppercase text-muted">{node.kind}</span>
           </button>
@@ -663,7 +708,7 @@ function SyncTab({ logs }: { logs: SyncLog[] }) {
             <tbody className="divide-y divide-line">
               {logs.map((log) => (
                 <tr key={log.id}>
-                  <td className="px-3 py-3 text-[11px] text-muted">{new Date(log.started_at).toLocaleString()}</td>
+                  <td className="px-3 py-3 text-[11px] text-muted"><RelativeTime value={log.started_at} /></td>
                   <td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${SYNC_BADGE[log.status] ?? 'bg-elevated text-muted'}`}>{log.status}</span></td>
                   <td className="px-3 py-3 text-ink">{log.users_found}</td>
                   <td className="px-3 py-3 text-ok">{log.users_created}</td>

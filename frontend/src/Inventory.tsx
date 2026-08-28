@@ -1,7 +1,14 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { API_BASE_URL, authHeaders } from './api/client'
 import { confirmDelete } from './confirm'
+import { breadcrumbsFor } from './layout/navigation'
+import { CopyText } from './ui/copy'
+import { EmptyState, PageHeader } from './ui/page'
+import { FilterBar, SkeletonRows, Table, TableFrame, THead, Td, filterInputClass, filterSelectClass } from './ui/table'
+import { RelativeTime } from './ui/time'
+import { toast } from './ui/toast'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -61,11 +68,12 @@ const label = 'mb-2 block text-sm font-medium text-ink'
 // ── Hosts panel ────────────────────────────────────────────────────────────
 
 export function HostsPanel() {
+  const [params, setParams] = useSearchParams()
   const [hosts, setHosts] = useState<Host[]>([])
   const [tags, setTags] = useState<HostTag[]>([])
   const [groups, setGroups] = useState<HostGroup[]>([])
   const [filter, setFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(params.get('status') ?? '')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [tagFilter, setTagFilter] = useState('')
@@ -73,6 +81,7 @@ export function HostsPanel() {
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   // form state
   const [hostname, setHostname] = useState('')
@@ -88,23 +97,40 @@ export function HostsPanel() {
   const [selectedGroups, setSelectedGroups] = useState<number[]>([])
 
   const loadAll = useCallback(() => {
+    setLoading(true)
     Promise.all([
       fetch(`${API_BASE_URL}/api/v1/inventory/hosts`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API_BASE_URL}/api/v1/inventory/tags`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API_BASE_URL}/api/v1/inventory/groups`, { headers: authHeaders() }).then((r) => r.json()),
-    ]).then(([h, t, g]) => { setHosts(h); setTags(t); setGroups(g) }).catch(() => setError('Failed to load'))
+    ]).then(([h, t, g]) => { setHosts(Array.isArray(h) ? h : []); setTags(Array.isArray(t) ? t : []); setGroups(Array.isArray(g) ? g : []) })
+      .catch(() => setError('Failed to load'))
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => {
+    const status = params.get('status')
+    if (status !== null) setStatusFilter(status)
+  }, [params])
+
+  const setStatus = (value: string) => {
+    setStatusFilter(value)
+    const next = new URLSearchParams(params)
+    if (value) next.set('status', value)
+    else next.delete('status')
+    setParams(next, { replace: true })
+  }
 
   const handleImport = async () => {
     setImporting(true); setImportMsg('')
     try {
       const r = await fetch(`${API_BASE_URL}/api/v1/inventory/hosts/import-from-ipam`, { method: 'POST', headers: authHeaders() })
       const data = await r.json()
-      setImportMsg(`Imported ${data.imported} host${data.imported !== 1 ? 's' : ''} from IPAM`)
+      const message = `Imported ${data.imported} host${data.imported !== 1 ? 's' : ''} from IPAM`
+      setImportMsg(message)
+      toast.ok(message)
       loadAll()
-    } catch { setImportMsg('Import failed') }
+    } catch { setImportMsg('Import failed'); toast.error('Import failed') }
     finally { setImporting(false) }
   }
 
@@ -124,16 +150,20 @@ export function HostsPanel() {
       body: JSON.stringify(body),
     })
     const data = await res.json()
-    if (!res.ok) { setError(data.detail ?? 'Failed'); return }
+    if (!res.ok) { setError(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     if (editingId) setHosts((p) => p.map((h) => h.id === editingId ? data : h).sort((a, b) => a.hostname.localeCompare(b.hostname)))
     else setHosts((p) => [...p, data].sort((a, b) => a.hostname.localeCompare(b.hostname)))
+    toast.ok(editingId ? 'Host updated' : 'Host added')
     resetForm()
   }
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirmDelete(`host "${name}"`)) return
+    if (!(await confirmDelete(`host "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/hosts/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) setHosts((p) => p.filter((h) => h.id !== id))
+    if (r.ok || r.status === 204) {
+      setHosts((p) => p.filter((h) => h.id !== id))
+      toast.ok(`Deleted ${name}`)
+    }
   }
 
   const toggleTag = (id: number) => setSelectedTags((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])
@@ -157,62 +187,59 @@ export function HostsPanel() {
 
   return (
     <section className="space-y-6">
-      {/* header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / Inventory</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Hosts</h2>
-          <p className="mt-2 text-muted">Registry of all managed and discovered devices across your homelab.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={handleImport} disabled={importing} className="rounded-2xl border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60">
-            {importing ? 'Importing…' : '⟳ Import from IPAM'}
-          </button>
-          <button onClick={() => { if (showAdd) resetForm(); else setShowAdd(true) }} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-sm transition hover:opacity-90">
-            {showAdd ? '✕ Cancel' : '+ Add host'}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        crumbs={breadcrumbsFor('/inventory')}
+        title="Hosts"
+        description="Registry of all managed and discovered devices across your homelab."
+        actions={
+          <>
+            <button onClick={handleImport} disabled={importing} className="rounded-2xl border border-accent/30 bg-accent/10 px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent/20 disabled:opacity-60">
+              {importing ? 'Importing…' : 'Import from IPAM'}
+            </button>
+            <button onClick={() => { if (showAdd) resetForm(); else setShowAdd(true) }} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-sm transition hover:opacity-90">
+              {showAdd ? 'Cancel' : 'Add host'}
+            </button>
+          </>
+        }
+      />
 
-      {importMsg && <p className={`rounded-2xl px-3 py-2 text-sm ${importMsg.includes('failed') ? 'bg-danger/10 text-danger' : 'bg-ok/10 text-ok'}`}>{importMsg}</p>}
+      {importMsg && <p className={`rounded-2xl px-3 py-2 text-sm ${importMsg.toLowerCase().includes('fail') ? 'bg-danger/10 text-danger' : 'bg-ok/10 text-ok'}`}>{importMsg}</p>}
 
-      {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          { label: 'Total', value: statCounts.total, badge: 'bg-elevated text-muted' },
-          { label: 'Active', value: statCounts.active, badge: 'bg-ok/15 text-ok' },
-          { label: 'Inactive', value: statCounts.inactive, badge: 'bg-elevated text-muted' },
-          { label: 'Unknown', value: statCounts.unknown, badge: 'bg-warn/15 text-warn' },
-        ].map(({ label: l, value: v, badge }) => (
-          <div key={l} className={`${section} flex items-center justify-between`}>
+          { label: 'Total', value: statCounts.total, badge: 'bg-elevated text-muted', status: '' },
+          { label: 'Active', value: statCounts.active, badge: 'bg-ok/15 text-ok', status: 'active' },
+          { label: 'Inactive', value: statCounts.inactive, badge: 'bg-elevated text-muted', status: 'inactive' },
+          { label: 'Unknown', value: statCounts.unknown, badge: 'bg-warn/15 text-warn', status: 'unknown' },
+        ].map(({ label: l, value: v, badge, status }) => (
+          <button key={l} type="button" onClick={() => setStatus(statusFilter === status ? '' : status)} className={`${section} flex items-center justify-between text-left ${statusFilter === status ? 'ring-1 ring-accent' : ''}`}>
             <div>
               <div className="text-2xl font-bold text-ink">{v}</div>
               <div className="mt-0.5 text-xs text-muted">{l}</div>
             </div>
             <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${badge}`}>{l}</span>
-          </div>
+          </button>
         ))}
       </div>
 
-      {/* filters */}
-      <div className="flex flex-wrap gap-3">
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by hostname, IP, FQDN, role…" className="flex-1 min-w-[200px] rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent" />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent">
+      <FilterBar>
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by hostname, IP, FQDN, role…" className={filterInputClass()} />
+        <select value={statusFilter} onChange={(e) => setStatus(e.target.value)} className={filterSelectClass()}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="decommissioned">Decommissioned</option>
           <option value="unknown">Unknown</option>
         </select>
-        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent">
+        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className={filterSelectClass()}>
           <option value="">All tags</option>
           {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent">
+        <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)} className={filterSelectClass()}>
           <option value="">All groups</option>
           {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
-      </div>
+      </FilterBar>
 
       {/* add form */}
       {showAdd && (
@@ -262,10 +289,9 @@ export function HostsPanel() {
         </form>
       )}
 
-      {/* table */}
-      <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-card">
-        <table className="min-w-full divide-y divide-line text-left text-sm">
-          <thead className="bg-canvas/80 text-muted">
+      <TableFrame>
+        <Table>
+          <THead>
             <tr>
               <th className="px-4 py-3 font-medium">Hostname</th>
               <th className="px-4 py-3 font-medium">IP</th>
@@ -277,50 +303,56 @@ export function HostsPanel() {
               <th className="px-4 py-3 font-medium">Last seen</th>
               <th className="px-4 py-3" />
             </tr>
-          </thead>
+          </THead>
           <tbody className="divide-y divide-line bg-surface/70">
-            {filtered.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-muted">
-                {hosts.length === 0 ? 'No hosts yet. Add one or import from IPAM scan results.' : 'No hosts match the current filter.'}
+            {loading ? (
+              <SkeletonRows cols={9} />
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={9} className="px-4 py-10">
+                <EmptyState
+                  title={hosts.length === 0 ? 'No hosts yet' : 'No hosts match'}
+                  body={hosts.length === 0 ? 'Add one or import from IPAM scan results.' : 'Try clearing status, tag, or search filters.'}
+                  action={hosts.length === 0 ? <button type="button" onClick={() => setShowAdd(true)} className="nx-btn-primary px-4 py-2 text-sm">Add a host</button> : undefined}
+                />
               </td></tr>
             ) : filtered.map((host) => (
               <tr key={host.id} className="hover:bg-elevated/70">
-                <td className="px-4 py-4">
+                <Td>
                   <div className="font-semibold text-ink">{host.hostname}</div>
                   {host.fqdn && <div className="font-mono text-[11px] text-muted">{host.fqdn}</div>}
-                </td>
-                <td className="px-4 py-4 font-mono text-ink">{host.ip_address ?? '—'}</td>
-                <td className="px-4 py-4">
+                </Td>
+                <Td>{host.ip_address ? <CopyText value={host.ip_address} label="IP address" /> : <span className="text-faint">—</span>}</Td>
+                <Td>
                   {host.os && <div className="text-ink">{host.os}</div>}
                   {host.role && <div className="text-xs text-muted">{host.role}</div>}
                   {!host.os && !host.role && <span className="text-faint">—</span>}
-                </td>
-                <td className="px-4 py-4 text-muted">{host.location ?? '—'}</td>
-                <td className="px-4 py-4">
+                </Td>
+                <Td className="text-muted">{host.location ?? '—'}</Td>
+                <Td>
                   <div className="flex flex-wrap gap-1.5">
                     {host.tags.length === 0 ? <span className="text-faint">—</span> : host.tags.map((t) => <TagPill key={t.id} tag={t} />)}
                   </div>
-                </td>
-                <td className="px-4 py-4">
+                </Td>
+                <Td>
                   <div className="flex flex-wrap gap-1.5">
                     {host.groups.length === 0 ? <span className="text-faint">—</span> : host.groups.map((g) => (
                       <span key={g.id} className="rounded-full border border-accent/30 bg-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-accent">{g.name}</span>
                     ))}
                   </div>
-                </td>
-                <td className="px-4 py-4"><StatusBadge status={host.status} /></td>
-                <td className="px-4 py-4 text-muted text-[11px]">{host.last_seen_at ? new Date(host.last_seen_at).toLocaleString() : '—'}</td>
-                <td className="px-4 py-4 text-right">
+                </Td>
+                <Td><StatusBadge status={host.status} /></Td>
+                <Td className="text-muted text-[11px]"><RelativeTime value={host.last_seen_at} /></Td>
+                <Td className="text-right">
                   <div className="flex justify-end gap-2">
                     <button onClick={() => startEdit(host)} className="rounded-xl border border-line px-3 py-1 text-xs text-muted hover:bg-elevated">Edit</button>
                     <button onClick={() => handleDelete(host.id, host.hostname)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger transition hover:bg-danger/20">Delete</button>
                   </div>
-                </td>
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
+        </Table>
+      </TableFrame>
     </section>
   )
 }
@@ -342,26 +374,27 @@ export function TagsPanel() {
     e.preventDefault(); setError('')
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/tags`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name, color }) })
     const data = await r.json()
-    if (!r.ok) { setError(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setError(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setTags((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
+    toast.ok('Tag added')
     setName(''); setColor('cyan')
   }
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirmDelete(`tag "${name}"`)) return
+    if (!(await confirmDelete(`tag "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/tags/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) setTags((p) => p.filter((t) => t.id !== id))
+    if (r.ok || r.status === 204) { setTags((p) => p.filter((t) => t.id !== id)); toast.ok(`Deleted ${name}`) }
   }
 
   const COLOR_OPTIONS = ['cyan', 'violet', 'emerald', 'amber', 'rose', 'sky', 'indigo']
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / Inventory</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Tags</h2>
-        <p className="mt-2 text-muted">Labels to categorise and filter hosts.</p>
-      </div>
+      <PageHeader
+        crumbs={breadcrumbsFor('/inventory/tags')}
+        title="Tags"
+        description="Labels to categorise and filter hosts."
+      />
       <form onSubmit={handleSubmit} className={`${section} flex flex-wrap items-end gap-4`}>
         <div className="flex-1 min-w-[160px]">
           <label className={label}>Tag name</label>
@@ -407,24 +440,25 @@ export function GroupsPanel() {
     e.preventDefault(); setError('')
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/groups`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name, description: description || null }) })
     const data = await r.json()
-    if (!r.ok) { setError(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setError(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setGroups((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
+    toast.ok('Group added')
     setName(''); setDescription('')
   }
 
   const handleDelete = async (id: number, groupName: string) => {
-    if (!confirmDelete(`group "${groupName}"`)) return
+    if (!(await confirmDelete(`group "${groupName}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/groups/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) setGroups((p) => p.filter((g) => g.id !== id))
+    if (r.ok || r.status === 204) { setGroups((p) => p.filter((g) => g.id !== id)); toast.ok(`Deleted ${groupName}`) }
   }
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / Inventory</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Groups</h2>
-        <p className="mt-2 text-muted">Logical host groupings for bulk operations and filtering.</p>
-      </div>
+      <PageHeader
+        crumbs={breadcrumbsFor('/inventory/groups')}
+        title="Groups"
+        description="Logical host groupings for bulk operations and filtering."
+      />
       <form onSubmit={handleSubmit} className={`${section} grid gap-4 md:grid-cols-2`}>
         <div><label className={label}>Group name</label><input value={name} onChange={(e) => setName(e.target.value)} required className={input} /></div>
         <div><label className={label}>Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className={input} /></div>
@@ -444,7 +478,7 @@ export function GroupsPanel() {
                 <tr key={g.id} className="hover:bg-elevated/70">
                   <td className="px-4 py-4 font-semibold text-ink">{g.name}</td>
                   <td className="px-4 py-4 text-muted">{g.description ?? '—'}</td>
-                  <td className="px-4 py-4 text-muted">{new Date(g.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-4 text-muted"><RelativeTime value={g.created_at} /></td>
                   <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(g.id, g.name)} className="rounded-xl border border-danger/30 bg-danger/10 px-3 py-1 text-xs text-danger hover:bg-danger/20">Delete</button></td>
                 </tr>
               ))}

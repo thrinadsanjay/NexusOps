@@ -68,3 +68,26 @@ export function isPathActive(pathname: string, to: string): boolean {
   }
   return pathname === to || pathname.startsWith(`${to}/`)
 }
+
+export type Crumb = { label: string; to?: string }
+
+export function breadcrumbsFor(pathname: string): Crumb[] {
+  const crumbs: Crumb[] = [{ label: 'Overview', to: '/' }]
+  let match: { group: string; item: NavLinkItem } | null = null
+  for (const group of NAV_GROUPS) {
+    for (const item of group.items) {
+      if (item.to === '/') continue
+      if (pathname === item.to || pathname.startsWith(`${item.to}/`)) {
+        if (!match || item.to.length > match.item.to.length) {
+          match = { group: group.label, item }
+        }
+      }
+    }
+  }
+  if (!match) {
+    return crumbs
+  }
+  crumbs.push({ label: match.group })
+  crumbs.push({ label: match.item.label, to: match.item.to })
+  return crumbs
+}

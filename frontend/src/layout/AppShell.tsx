@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 
-import { ThemeToggle } from '../theme'
+import { CommandPalette } from '../ui/command-palette'
+import { UserMenu } from '../ui/user-menu'
 import { SiteFooter } from './SiteFooter'
 import { NAV_GROUPS, isPathActive, type NavGroup, type NavLinkItem } from './navigation'
 
@@ -17,15 +18,6 @@ type AppShellProps = {
   canAccess: (permission: string | null) => boolean
   onLogout: () => void
   children: ReactNode
-}
-
-function initialsFor(user: AuthUser): string {
-  const source = user.full_name || user.username || user.email
-  const parts = source.trim().split(/\s+/)
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
-  }
-  return source.slice(0, 2).toUpperCase()
 }
 
 function visibleGroups(groups: NavGroup[], canAccess: (permission: string | null) => boolean): NavGroup[] {
@@ -49,6 +41,7 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
   const location = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const groups = useMemo(() => visibleGroups(NAV_GROUPS, canAccess), [canAccess])
   const menuId = useId()
 
@@ -62,6 +55,11 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
       if (event.key === 'Escape') {
         setOpenMenu(null)
         setMobileOpen(false)
+        setPaletteOpen(false)
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen((value) => !value)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -115,7 +113,7 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
                       group={group}
                       pathname={location.pathname}
                       open={openMenu === group.id}
-                      onClose={() => setOpenMenu((current) => (current === group.id ? null : current))}
+                      onClose={() => setOpenMenu(null)}
                       onToggle={() => setOpenMenu((current) => (current === group.id ? null : group.id))}
                     />
                   )}
@@ -125,21 +123,15 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
-            <ThemeToggle compact />
-            <p className="hidden text-right text-xs leading-4 text-muted sm:block">
-              <span className="block font-medium text-ink">{displayName}</span>
-              <span className="capitalize">{roleLabel}</span>
-            </p>
-            <span className="hidden h-8 w-8 items-center justify-center rounded-full bg-elevated text-xs font-semibold text-ink sm:inline-flex" aria-hidden="true">
-              {initialsFor(user)}
-            </span>
             <button
               type="button"
-              onClick={onLogout}
-              className="rounded-md border border-line px-3 py-1.5 text-sm text-ink transition hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="hidden rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:bg-elevated hover:text-ink sm:inline-flex"
+              onClick={() => setPaletteOpen(true)}
             >
-              Sign out
+              Search
+              <kbd className="ml-2 rounded border border-line px-1 text-[10px]">⌘K</kbd>
             </button>
+            <UserMenu displayName={displayName} roleLabel={roleLabel} onLogout={onLogout} />
             <button
               type="button"
               className="rounded-md border border-line px-3 py-1.5 text-sm text-ink lg:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -154,6 +146,9 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
 
         {mobileOpen && (
           <div id={menuId} className="border-t border-line bg-surface px-4 py-4 lg:hidden" role="dialog" aria-modal="true" aria-label="Main menu">
+            <button type="button" className="mb-3 w-full rounded-md border border-line px-3 py-2 text-left text-sm text-muted" onClick={() => { setMobileOpen(false); setPaletteOpen(true) }}>
+              Search pages and records…
+            </button>
             <MobileNav groups={groups} pathname={location.pathname} onNavigate={() => setMobileOpen(false)} />
           </div>
         )}
@@ -163,6 +158,7 @@ export function AppShell({ user, canAccess, onLogout, children }: AppShellProps)
         {children}
       </main>
       <SiteFooter groups={groups} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} canAccess={canAccess} />
     </div>
   )
 }
@@ -181,13 +177,15 @@ function DesktopMenu({
   onToggle: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const itemRefs = useRef<Array<HTMLAnchorElement | null>>([])
+  const [active, setActive] = useState(0)
+  const [buffer, setBuffer] = useState('')
+  const bufferTimer = useRef<number | null>(null)
   const menuId = `${group.id}-menu`
   const groupActive = group.items.some((item) => itemIsActive(pathname, item, group.items))
 
   useEffect(() => {
-    if (!open) {
-      return
-    }
+    if (!open) return
     const onPointer = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         onClose()
@@ -196,6 +194,53 @@ function DesktopMenu({
     document.addEventListener('mousedown', onPointer)
     return () => document.removeEventListener('mousedown', onPointer)
   }, [open, onClose])
+
+  useEffect(() => {
+    if (open) {
+      const index = Math.max(0, group.items.findIndex((item) => itemIsActive(pathname, item, group.items)))
+      setActive(index)
+      window.setTimeout(() => itemRefs.current[index]?.focus(), 0)
+    }
+  }, [open, group.items, pathname])
+
+  const move = useCallback(
+    (next: number) => {
+      const index = (next + group.items.length) % group.items.length
+      setActive(index)
+      itemRefs.current[index]?.focus()
+    },
+    [group.items.length],
+  )
+
+  const onTypeahead = (key: string) => {
+    if (key.length !== 1 || !key.match(/\S/)) return
+    const nextBuffer = `${buffer}${key.toLowerCase()}`
+    setBuffer(nextBuffer)
+    if (bufferTimer.current) window.clearTimeout(bufferTimer.current)
+    bufferTimer.current = window.setTimeout(() => setBuffer(''), 500)
+    const index = group.items.findIndex((item) => item.label.toLowerCase().startsWith(nextBuffer))
+    if (index >= 0) move(index)
+  }
+
+  const onMenuKey = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      move(active + 1)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      move(active - 1)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      move(0)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      move(group.items.length - 1)
+    } else if (event.key === 'Escape') {
+      onClose()
+    } else {
+      onTypeahead(event.key)
+    }
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -208,6 +253,12 @@ function DesktopMenu({
         aria-haspopup="true"
         aria-controls={menuId}
         onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' && !open) {
+            event.preventDefault()
+            onToggle()
+          }
+        }}
       >
         {group.label}
         <span aria-hidden="true" className="text-[10px] text-faint">
@@ -215,17 +266,20 @@ function DesktopMenu({
         </span>
       </button>
       {open && (
-        <div id={menuId} role="menu" aria-label={group.label} className="absolute left-0 top-full z-40 min-w-64 rounded-xl border border-line bg-surface p-2 shadow-card">
-          {group.items.map((item) => {
-            const active = itemIsActive(pathname, item, group.items)
+        <div id={menuId} role="menu" aria-label={group.label} className="absolute left-0 top-full z-40 min-w-64 rounded-xl border border-line bg-surface p-2 shadow-card" onKeyDown={onMenuKey}>
+          {group.items.map((item, index) => {
+            const current = itemIsActive(pathname, item, group.items)
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 role="menuitem"
-                aria-current={active ? 'page' : undefined}
+                aria-current={current ? 'page' : undefined}
+                ref={(node) => {
+                  itemRefs.current[index] = node
+                }}
                 className={`block rounded-lg px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-                  active ? 'bg-accent-soft text-accent' : 'text-ink hover:bg-elevated'
+                  current || index === active ? 'bg-accent-soft text-accent' : 'text-ink hover:bg-elevated'
                 }`}
               >
                 <span className="block text-sm font-medium">{item.label}</span>

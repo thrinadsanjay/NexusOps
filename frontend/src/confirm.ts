@@ -1,3 +1,1 @@
-export function confirmDelete(what: string): boolean {
-  return window.confirm(`Delete ${what}? This cannot be undone.`)
-}
+export { confirmDelete, confirmAction, ConfirmHost } from './ui/confirm-dialog'

@@ -1,7 +1,14 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { API_BASE_URL, authHeaders } from './api/client'
 import { confirmDelete } from './confirm'
+import { breadcrumbsFor } from './layout/navigation'
+import { CopyText } from './ui/copy'
+import { EmptyState, PageHeader } from './ui/page'
+import { FilterBar, SkeletonRows, Table, TableFrame, THead, Td, filterInputClass, filterSelectClass } from './ui/table'
+import { RelativeTime } from './ui/time'
+import { toast } from './ui/toast'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -47,13 +54,15 @@ const card = 'rounded-2xl border border-line bg-surface p-5 shadow-card'
 // ── PKI main panel ─────────────────────────────────────────────────────────
 
 export function PkiPanel() {
+  const [params, setParams] = useSearchParams()
   const [cas, setCas] = useState<CA[]>([])
   const [certs, setCerts] = useState<Cert[]>([])
   const [summary, setSummary] = useState<ExpirySummary | null>(null)
   const [selectedCa, setSelectedCa] = useState<CA | null>(null)
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [expiryFilter, setExpiryFilter] = useState('')
+  const [expiryFilter, setExpiryFilter] = useState(params.get('expiry') ?? '')
+  const [loading, setLoading] = useState(true)
 
   // CA form
   const [showCaForm, setShowCaForm] = useState(false)
@@ -77,27 +86,43 @@ export function PkiPanel() {
   const [cErr, setCErr] = useState('')
 
   const load = useCallback(() => {
+    setLoading(true)
     Promise.all([
       fetch(`${API_BASE_URL}/api/v1/pki/cas`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API_BASE_URL}/api/v1/pki/certificates`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API_BASE_URL}/api/v1/pki/expiry-summary`, { headers: authHeaders() }).then((r) => r.json()),
-    ]).then(([c, ce, s]) => { setCas(c); setCerts(ce); setSummary(s) }).catch(() => undefined)
+    ]).then(([c, ce, s]) => { setCas(Array.isArray(c) ? c : []); setCerts(Array.isArray(ce) ? ce : []); setSummary(s) })
+      .catch(() => undefined)
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const expiry = params.get('expiry')
+    if (expiry !== null) setExpiryFilter(expiry)
+  }, [params])
+
+  const setExpiry = (value: string) => {
+    setExpiryFilter(value)
+    const next = new URLSearchParams(params)
+    if (value) next.set('expiry', value)
+    else next.delete('expiry')
+    setParams(next, { replace: true })
+  }
 
   const handleCreateCa = async (e: FormEvent) => {
     e.preventDefault(); setCaErr('')
     const r = await fetch(`${API_BASE_URL}/api/v1/pki/cas`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ name: caName, common_name: caCn, is_root: caRoot, expires_at: caExpiry || null }) })
     const data = await r.json()
-    if (!r.ok) { setCaErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setCaErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setCas((p) => [...p, data]); setCaName(''); setCaCn(''); setCaExpiry(''); setShowCaForm(false)
+    toast.ok('Certificate authority added')
   }
 
   const handleDeleteCa = async (id: number, name: string) => {
-    if (!confirmDelete(`certificate authority "${name}"`)) return
+    if (!(await confirmDelete(`certificate authority "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/pki/cas/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) { setCas((p) => p.filter((c) => c.id !== id)); if (selectedCa?.id === id) setSelectedCa(null) }
+    if (r.ok || r.status === 204) { setCas((p) => p.filter((c) => c.id !== id)); if (selectedCa?.id === id) setSelectedCa(null); toast.ok(`Deleted ${name}`) }
   }
 
   const handleCreateCert = async (e: FormEvent) => {
@@ -107,20 +132,21 @@ export function PkiPanel() {
       body: JSON.stringify({ common_name: cCn, cert_type: cType, issued_to: cIssuedTo || null, subject_alt_names: cSans || null, serial_number: cSerial || null, issued_at: cIssuedAt || null, expires_at: cExpiresAt || null, ca_id: cCaId ? Number(cCaId) : null, notes: cNotes || null }),
     })
     const data = await r.json()
-    if (!r.ok) { setCErr(data.detail ?? 'Failed'); return }
+    if (!r.ok) { setCErr(data.detail ?? 'Failed'); toast.error(data.detail ?? 'Failed'); return }
     setCerts((p) => [...p, data]); setCCn(''); setCIssuedTo(''); setCSans(''); setCSerial(''); setCIssuedAt(''); setCExpiresAt(''); setCCaId(''); setCNotes(''); setShowCertForm(false)
+    toast.ok('Certificate added')
     load()
   }
 
   const handleRevoke = async (id: number) => {
     const r = await fetch(`${API_BASE_URL}/api/v1/pki/certificates/${id}/revoke`, { method: 'POST', headers: authHeaders() })
-    if (r.ok) { setCerts((p) => p.map((c) => c.id === id ? { ...c, status: 'revoked' } : c)); load() }
+    if (r.ok) { setCerts((p) => p.map((c) => c.id === id ? { ...c, status: 'revoked' } : c)); toast.ok('Certificate revoked'); load() }
   }
 
   const handleDeleteCert = async (id: number, name: string) => {
-    if (!confirmDelete(`certificate "${name}"`)) return
+    if (!(await confirmDelete(`certificate "${name}"`))) return
     const r = await fetch(`${API_BASE_URL}/api/v1/pki/certificates/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) { setCerts((p) => p.filter((c) => c.id !== id)); load() }
+    if (r.ok || r.status === 204) { setCerts((p) => p.filter((c) => c.id !== id)); toast.ok(`Deleted ${name}`); load() }
   }
 
   const filtered = certs.filter((c) => {
@@ -133,29 +159,70 @@ export function PkiPanel() {
     return matchText && matchStatus && matchCa && matchExpiry
   })
 
+  const timeline = useMemo(() => {
+    return [...certs]
+      .filter((c) => c.expires_at && c.status !== 'revoked')
+      .map((c) => ({ cert: c, days: daysUntil(c.expires_at) ?? 0 }))
+      .sort((a, b) => a.days - b.days)
+  }, [certs])
+
+  const setExpiryFromChip = (value: string) => setExpiry(expiryFilter === value ? '' : value)
+
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Infrastructure / PKI</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-ink">Certificate Management</h2>
-        <p className="mt-2 text-muted">Track certificate authorities, issued certificates, and expiry across your homelab.</p>
-      </div>
+      <PageHeader
+        crumbs={breadcrumbsFor('/pki')}
+        title="Certificate Management"
+        description="Track certificate authorities, issued certificates, and expiry across your homelab."
+        actions={<button onClick={() => setShowCertForm((p) => !p)} className="rounded-2xl bg-accent px-4 py-2 text-sm font-semibold text-accent-fg">{showCertForm ? 'Cancel' : 'Add certificate'}</button>}
+      />
 
-      {/* expiry summary */}
       {summary && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {[
-            { label: 'Active', value: summary.active, badge: 'bg-ok/15 text-ok' },
-            { label: 'Expiring 30d', value: summary.expiring_30d, badge: 'bg-danger/15 text-danger' },
-            { label: 'Expiring 90d', value: summary.expiring_90d, badge: 'bg-warn/15 text-warn' },
-            { label: 'Expired', value: summary.expired, badge: 'bg-danger/15 text-danger' },
-            { label: 'Revoked', value: summary.revoked, badge: 'bg-elevated text-muted' },
-          ].map(({ label, value, badge }) => (
-            <div key={label} className={`${card} flex items-center justify-between`}>
+            { label: 'Active', value: summary.active, badge: 'bg-ok/15 text-ok', expiry: '' },
+            { label: 'Expiring 30d', value: summary.expiring_30d, badge: 'bg-danger/15 text-danger', expiry: '30' },
+            { label: 'Expiring 90d', value: summary.expiring_90d, badge: 'bg-warn/15 text-warn', expiry: '90' },
+            { label: 'Expired', value: summary.expired, badge: 'bg-danger/15 text-danger', expiry: 'expired' },
+            { label: 'Revoked', value: summary.revoked, badge: 'bg-elevated text-muted', expiry: '' },
+          ].map(({ label, value, badge, expiry }) => (
+            <button key={label} type="button" onClick={() => expiry ? setExpiryFromChip(expiry) : undefined} className={`${card} flex items-center justify-between text-left ${expiry && expiryFilter === expiry ? 'ring-1 ring-accent' : ''}`}>
               <div><div className="text-2xl font-bold text-ink">{value}</div><div className="mt-0.5 text-xs text-muted">{label}</div></div>
               <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${badge}`}>{label}</span>
-            </div>
+            </button>
           ))}
+        </div>
+      )}
+
+      {timeline.length > 0 && (
+        <div className={card}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-ink">Expiry timeline</h3>
+            <p className="text-xs text-muted">Soonest first. Click a certificate to filter the table.</p>
+          </div>
+          <ol className="space-y-2">
+            {timeline.slice(0, 12).map(({ cert, days }) => {
+              const tone = days < 0 ? 'border-danger/30 bg-danger/10 text-danger' : days <= 30 ? 'border-warn/30 bg-warn/10 text-warn' : days <= 90 ? 'border-line bg-canvas text-ink' : 'border-ok/30 bg-ok/10 text-ok'
+              return (
+                <li key={cert.id}>
+                  <button
+                    type="button"
+                    className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left ${tone}`}
+                    onClick={() => {
+                      setFilter(cert.common_name)
+                      setExpiry(days < 0 ? 'expired' : days <= 30 ? '30' : days <= 90 ? '90' : '')
+                    }}
+                  >
+                    <span>
+                      <span className="block font-mono text-sm font-semibold">{cert.common_name}</span>
+                      <span className="block text-[11px] opacity-80">{cert.serial_number ? `Serial ${cert.serial_number}` : cert.cert_type}</span>
+                    </span>
+                    <ExpiryChip iso={cert.expires_at} />
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
         </div>
       )}
 
@@ -237,50 +304,48 @@ export function PkiPanel() {
             </form>
           )}
 
-          {/* filters */}
-          <div className="flex flex-wrap gap-3">
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by CN, issued to, serial…" className="flex-1 min-w-[200px] rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent" />
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent">
+          <FilterBar>
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by CN, issued to, serial…" className={filterInputClass()} />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={filterSelectClass()}>
               <option value="">All statuses</option><option value="active">Active</option><option value="expired">Expired</option><option value="revoked">Revoked</option><option value="pending">Pending</option>
             </select>
-            <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)} className="rounded-2xl border border-line bg-canvas px-3 py-2.5 text-sm text-ink outline-none focus:border-accent">
+            <select value={expiryFilter} onChange={(e) => setExpiry(e.target.value)} className={filterSelectClass()}>
               <option value="">Any expiry</option><option value="30">Expiring ≤ 30d</option><option value="90">Expiring ≤ 90d</option><option value="expired">Already expired</option>
             </select>
-          </div>
+          </FilterBar>
 
-          <div className="overflow-x-auto rounded-2xl border border-line bg-surface shadow-card">
-            <table className="min-w-full divide-y divide-line text-left text-sm">
-              <thead className="bg-canvas/80 text-muted">
-                <tr><th className="px-4 py-3 font-medium">Common name</th><th className="px-4 py-3 font-medium">Type</th><th className="px-4 py-3 font-medium">Issued to</th><th className="px-4 py-3 font-medium">CA</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Expires</th><th className="px-4 py-3 font-medium">Days left</th><th className="px-4 py-3" /></tr>
-              </thead>
+          <TableFrame>
+            <Table>
+              <THead>
+                <tr><th className="px-4 py-3 font-medium">Common name</th><th className="px-4 py-3 font-medium">Type</th><th className="px-4 py-3 font-medium">Issued to</th><th className="px-4 py-3 font-medium">Serial</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Expires</th><th className="px-4 py-3 font-medium">Days left</th><th className="px-4 py-3" /></tr>
+              </THead>
               <tbody className="divide-y divide-line bg-surface/70">
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-muted">
-                    {certs.length === 0 ? 'No certificates tracked yet. Add your first certificate.' : 'No certificates match the current filter.'}
+                {loading ? (
+                  <SkeletonRows cols={8} />
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={8} className="px-4 py-10">
+                    <EmptyState title={certs.length === 0 ? 'No certificates tracked yet' : 'No certificates match'} body={certs.length === 0 ? 'Add your first certificate to start the expiry timeline.' : 'Clear filters or pick a different CA.'} />
                   </td></tr>
-                ) : filtered.map((cert) => {
-                  const ca = cas.find((c) => c.id === cert.ca_id)
-                  return (
+                ) : filtered.map((cert) => (
                     <tr key={cert.id} className="hover:bg-elevated/70">
-                      <td className="px-4 py-3 font-mono font-semibold text-ink">{cert.common_name}</td>
-                      <td className="px-4 py-3"><TypePill t={cert.cert_type} /></td>
-                      <td className="px-4 py-3 text-ink">{cert.issued_to ?? '—'}</td>
-                      <td className="px-4 py-3 text-muted">{ca ? ca.name : '—'}</td>
-                      <td className="px-4 py-3"><StatusPill s={cert.status} /></td>
-                      <td className="px-4 py-3 font-mono text-[11px] text-muted">{cert.expires_at ? new Date(cert.expires_at).toLocaleDateString() : '—'}</td>
-                      <td className="px-4 py-3"><ExpiryChip iso={cert.expires_at} /></td>
-                      <td className="px-4 py-3 text-right space-x-2">
+                      <Td className="font-mono font-semibold text-ink">{cert.common_name}</Td>
+                      <Td><TypePill t={cert.cert_type} /></Td>
+                      <Td className="text-ink">{cert.issued_to ?? '—'}</Td>
+                      <Td>{cert.serial_number ? <CopyText value={cert.serial_number} label="serial" /> : <span className="text-faint">—</span>}</Td>
+                      <Td><StatusPill s={cert.status} /></Td>
+                      <Td className="font-mono text-[11px] text-muted">{cert.expires_at ? <RelativeTime value={cert.expires_at} /> : '—'}</Td>
+                      <Td><ExpiryChip iso={cert.expires_at} /></Td>
+                      <Td className="text-right space-x-2">
                         {cert.status === 'active' && (
                           <button onClick={() => handleRevoke(cert.id)} className="rounded-xl border border-warn/30 bg-warn/10 px-2 py-1 text-[10px] text-warn hover:bg-warn/20">Revoke</button>
                         )}
                         <button onClick={() => handleDeleteCert(cert.id, cert.common_name)} className="rounded-xl border border-danger/30 bg-danger/10 px-2 py-1 text-[10px] text-danger hover:bg-danger/20">✕</button>
-                      </td>
+                      </Td>
                     </tr>
-                  )
-                })}
+                ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </TableFrame>
         </div>
       </div>
     </section>
