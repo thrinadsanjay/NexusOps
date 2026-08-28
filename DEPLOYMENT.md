@@ -18,6 +18,37 @@ docker compose pull
 docker compose up -d
 ```
 
+## New server (clone `main`)
+
+`main` only tracks three files from `Development` (compose, README, env example). Clone it on the host; do not copy files by hand.
+
+```bash
+git clone --branch main --single-branch https://github.com/thrinadsanjay/NexusOps.git /opt/nexusops
+cd /opt/nexusops
+cp .env.server.example .env
+# set PUBLIC_HOST to this server's DNS name or IP, then matching URLs:
+#   APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL
+# rotate POSTGRES_PASSWORD (and DATABASE_URL), JWT_SECRET_KEY, DEFAULT_ADMIN_PASSWORD
+
+echo "$GHCR_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker compose -f docker-compose.server.yml pull
+docker compose -f docker-compose.server.yml up -d
+```
+
+To pick up compose or env-template changes later: `git pull` then `docker compose -f docker-compose.server.yml pull && docker compose -f docker-compose.server.yml up -d`.
+
+`VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names like `http://backend:8000`. CORS is taken from `FRONTEND_URL`.
+
+Postgres, Redis, and LDAP ports bind to `127.0.0.1` by default. The UI (`FRONTEND_PORT`, default 5173) and API (`BACKEND_PORT`, default 8000) bind on all interfaces. Manage the bundled OpenLDAP directory from the NexusOps **LDAP** page (`/ldap`); there is no separate LDAP admin container.
+
+Optional LDAP directory seed (only if you also copied `ldap-bootstrap/init.ldif` and kept the default `dc=homelab,dc=local` tree):
+
+```bash
+docker compose -f docker-compose.server.yml cp ldap-bootstrap/init.ldif openldap:/tmp/init.ldif
+docker compose -f docker-compose.server.yml exec openldap ldapadd -x \
+  -D "cn=admin,dc=homelab,dc=local" -w "$LDAP_ADMIN_PASSWORD" -f /tmp/init.ldif
+```
+
 `docker compose pull` uses:
 
 | Service | Default image |
@@ -29,11 +60,12 @@ Override the tags with `NEXUSOPS_BACKEND_IMAGE` and `NEXUSOPS_FRONTEND_IMAGE` in
 
 This stack includes:
 
-- PostgreSQL on port 5432
-- Redis on port 6379
+- PostgreSQL (loopback `5432` on server compose)
+- Redis (loopback `6379` on server compose)
 - FastAPI backend on port 8000
 - Celery worker
 - Vite frontend on port 5173
+- OpenLDAP (loopback `389` on server compose; manage it from the NexusOps LDAP page)
 
 ## CI/CD images
 
@@ -41,11 +73,14 @@ Workflow: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publ
 
 | Event | Tests | Build | Push |
 |---|---|---|---|
-| Pull request to `Development` or `main` | yes | yes | no |
+| Pull request to `Development` | yes | yes | no |
 | Push to `Development` | yes | yes | GHCR (`latest` + branch + `sha-*`) |
-| Push to `main` | yes | yes | GHCR (`stable` + branch + `sha-*`) |
 | Tag `v*` | yes | yes | GHCR (semver tags) |
 | Manual **Run workflow** | yes | yes | GHCR (unless run on a PR ref) |
+
+Pushing those deploy files to `Development` also runs [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml), which copies `docker-compose.server.yml`, `README.md`, and `.env.server.example` onto `main`. Image builds do not run on `main`.
+
+If the sync job cannot push, allow GitHub Actions write access to `main` (**Settings → Actions → General → Workflow permissions**, and any branch-protection rules on `main`).
 
 Optional second registry: set repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. The same image names (`nexusops-backend`, `nexusops-frontend`) are then also pushed to Docker Hub.
 
