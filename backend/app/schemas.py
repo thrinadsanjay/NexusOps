@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.core.validators import CidrStr, IpStr, MacStr, OptionalIp, OptionalMac
+
 
 class TokenData(BaseModel):
     sub: str
@@ -32,11 +34,33 @@ class UserRead(BaseModel):
     is_active: bool
     is_superuser: bool
     created_at: datetime
+    permissions: list[str] = []
+    role_names: list[str] = []
+
+    @classmethod
+    def from_user(cls, user: object) -> "UserRead":
+        roles = getattr(user, "roles", []) or []
+        return cls(
+            id=getattr(user, "id"),
+            email=getattr(user, "email"),
+            username=getattr(user, "username"),
+            full_name=getattr(user, "full_name", None),
+            is_active=bool(getattr(user, "is_active", False)),
+            is_superuser=bool(getattr(user, "is_superuser", False)),
+            created_at=getattr(user, "created_at"),
+            permissions=sorted({permission.name for role in roles for permission in getattr(role, "permissions", [])}),
+            role_names=[getattr(role, "name") for role in roles],
+        )
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class AuthToken(BaseModel):
@@ -107,6 +131,15 @@ class ApiTokenRead(BaseModel):
     is_active: bool
 
 
+class ApiTokenCreated(BaseModel):
+    id: int
+    name: str
+    prefix: str
+    token: str
+    expires_at: datetime | None = None
+    is_active: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 – Network / IPAM
 # ---------------------------------------------------------------------------
@@ -137,10 +170,10 @@ class VLanRead(BaseModel):
 
 
 class SubnetCreate(BaseModel):
-    cidr: str = Field(min_length=7, max_length=50)
+    cidr: CidrStr = Field(min_length=7, max_length=50)
     name: str = Field(min_length=1, max_length=120)
     description: str | None = None
-    gateway: str | None = None
+    gateway: OptionalIp = None
     vlan_id: int | None = None
     status: str = "active"
 
@@ -148,7 +181,7 @@ class SubnetCreate(BaseModel):
 class SubnetUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
-    gateway: str | None = None
+    gateway: OptionalIp = None
     vlan_id: int | None = None
     status: str | None = None
 
@@ -168,13 +201,13 @@ class SubnetRead(BaseModel):
 
 
 class IPAddressCreate(BaseModel):
-    address: str = Field(min_length=7, max_length=50)
+    address: IpStr = Field(min_length=7, max_length=50)
     subnet_id: int | None = None
     hostname: str | None = None
     description: str | None = None
     status: str = "assigned"
     dns_name: str | None = None
-    mac_address: str | None = None
+    mac_address: OptionalMac = None
 
 
 class IPAddressUpdate(BaseModel):
@@ -183,7 +216,7 @@ class IPAddressUpdate(BaseModel):
     description: str | None = None
     status: str | None = None
     dns_name: str | None = None
-    mac_address: str | None = None
+    mac_address: OptionalMac = None
 
 
 class IPAddressRead(BaseModel):
@@ -252,8 +285,8 @@ class HostGroupCreate(BaseModel):
 class HostCreate(BaseModel):
     hostname: str = Field(min_length=1, max_length=255)
     fqdn: str | None = None
-    ip_address: str | None = None
-    mac_address: str | None = None
+    ip_address: OptionalIp = None
+    mac_address: OptionalMac = None
     os: str | None = None
     role: str | None = None
     status: str = "active"
@@ -268,8 +301,8 @@ class HostCreate(BaseModel):
 class HostUpdate(BaseModel):
     hostname: str | None = None
     fqdn: str | None = None
-    ip_address: str | None = None
-    mac_address: str | None = None
+    ip_address: OptionalIp = None
+    mac_address: OptionalMac = None
     os: str | None = None
     role: str | None = None
     status: str | None = None
@@ -385,8 +418,8 @@ class DhcpLeaseRead(BaseModel):
 
 
 class DhcpLeaseCreate(BaseModel):
-    ip_address: str
-    mac_address: str
+    ip_address: IpStr
+    mac_address: MacStr
     hostname: str | None = None
     status: str = "active"
     lease_start: datetime | None = None
@@ -406,8 +439,8 @@ class DhcpReservationRead(BaseModel):
 
 
 class DhcpReservationCreate(BaseModel):
-    ip_address: str
-    mac_address: str
+    ip_address: IpStr
+    mac_address: MacStr
     hostname: str | None = None
     description: str | None = None
 
@@ -430,17 +463,17 @@ class DhcpPoolRead(BaseModel):
 
 
 class DhcpPoolCreate(BaseModel):
-    subnet: str
-    range_start: str
-    range_end: str
-    gateway: str | None = None
+    subnet: CidrStr
+    range_start: IpStr
+    range_end: IpStr
+    gateway: OptionalIp = None
     dns_servers: str | None = None
     lease_time: int = 86400
     description: str | None = None
 
 
 class DhcpPoolUpdate(BaseModel):
-    gateway: str | None = None
+    gateway: OptionalIp = None
     dns_servers: str | None = None
     lease_time: int | None = None
     description: str | None = None
@@ -624,3 +657,96 @@ class LdapSyncLogRead(BaseModel):
     error_message: str | None = None
     started_at: datetime
     finished_at: datetime | None = None
+
+
+class DirectoryUserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    title: str | None = None
+    department: str | None = None
+    office: str | None = None
+    manager_dn: str | None = None
+    member_of: list[str] = []
+    enabled: bool = True
+
+
+class DirectoryUserUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    title: str | None = None
+    department: str | None = None
+    office: str | None = None
+    manager_dn: str | None = None
+    member_of: list[str] | None = None
+    enabled: bool | None = None
+
+
+class DirectoryPasswordReset(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class DirectoryUserRead(BaseModel):
+    dn: str
+    username: str
+    common_name: str
+    uid: str
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    title: str | None = None
+    department: str | None = None
+    office: str | None = None
+    manager_dn: str | None = None
+    enabled: bool = True
+    employee_type: str | None = None
+    member_of: list[str] = []
+
+
+class DirectoryGroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
+    description: str | None = None
+    members: list[str] = []
+
+
+class DirectoryGroupUpdate(BaseModel):
+    description: str | None = None
+
+
+class DirectoryGroupRead(BaseModel):
+    dn: str
+    name: str
+    description: str | None = None
+    members: list[str] = []
+    member_count: int = 0
+
+
+class DirectoryMemberChange(BaseModel):
+    member: str = Field(min_length=1, max_length=512)
+
+
+class DirectoryOuCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
+    parent_dn: str | None = None
+    description: str | None = None
+
+
+class DirectoryOuRead(BaseModel):
+    dn: str
+    name: str
+    description: str | None = None
+
+
+class DirectoryTreeNode(BaseModel):
+    dn: str
+    name: str
+    kind: str

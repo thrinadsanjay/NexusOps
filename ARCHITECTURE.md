@@ -1,47 +1,32 @@
-# NexusOps Architecture Proposal
+# NexusOps Architecture
 
-## Goal
+NexusOps is a modular, self-hosted infrastructure control plane for homelabs. IPAM, DNS, DHCP, and PKI are **registries** in PostgreSQL, not live PowerDNS/Kea/step-ca servers. Identity uses bundled OpenLDAP plus local RBAC.
 
-NexusOps is a modular, self-hosted Infrastructure Operations Platform designed to centralize network, identity, security, automation, and provisioning functions for a homelab. It complements Forge, which focuses on visibility into what is running, by providing the operating plane for configuration, automation, and lifecycle management.
+## Stack
 
-## System architecture
+- Frontend: React 18 + TypeScript + Vite + Tailwind
+- API: FastAPI + SQLAlchemy 2 + Alembic
+- Jobs: Celery + Redis
+- Identity: OpenLDAP (osixia) managed in-app; JWT sessions and `nxo_` API tokens
+- Data: PostgreSQL 16
 
-### Frontend
+## Request path
 
-- React + TypeScript + Vite
-- Tailwind CSS for a compact, infrastructure-friendly admin interface
-- shadcn/ui patterns for consistency and accessibility
-- TanStack Query for API data access
-- React Router for module-level navigation
+Browser → frontend (nginx in Compose) → FastAPI. Auth is cookie or Bearer JWT/`nxo_` token. `require_permission` gates module routes. Directory writes go through `ldap_directory` over ldap3 using the server's encrypted bind password.
 
-### Backend
+## Directory model
 
-- FastAPI service layer for API-first operations
-- SQLAlchemy 2.x ORM with PostgreSQL as the primary database
-- Alembic for schema migration management
-- Service-oriented modular layout for network, identity, PKI, SMTP, automation, diagnostics, and provisioning
-- Pydantic validation and structured settings
+Seed DIT:
 
-### Background workers
+- `ou=users,{base}` — `inetOrgPerson` users (`cn={uid}`)
+- `ou=groups,{base}` — `groupOfNames` (`nexusops-admins` / `operators` / `viewers`)
+- Group CN maps to NexusOps roles on login and sync
+- Disabled accounts: `employeeType=disabled` (optional `pwdAccountLockedTime`)
 
-- Redis for broker and result backend
-- Celery for scheduled and long-running tasks, including Ansible execution, certificate renewal, network scans, and SMTP retries
+## Modules
 
-### Deployment model
+`backend/app/modules/` owns HTTP for IPAM, inventory, DNS, DHCP, PKI, LDAP, and dashboard stats. Shared auth, crypto, pagination, and validators live in `backend/app/core/`.
 
-- Docker Compose for development and homelab deployments
-- Persistent volumes for PostgreSQL and Redis
-- Health checks and environment configuration via `.env`
-- Reverse proxy support through configurable application and public URLs
+## Deployment
 
-## Foundational principles for Phase 0
-
-- Keep the application shell intentionally minimal and safe
-- Separate domain modules from infrastructure providers
-- Avoid business logic in the UI
-- Keep all configuration in environment variables
-- Provide a health API and a clean migration path for future modules
-
-## Future module boundaries
-
-The first phase intentionally does not add DNS, DHCP, LDAP, or certificate logic. The project is structured so those modules can be added under `backend/app/modules/...` while preserving shared APIs, settings, and auditing patterns.
+Docker Compose publishes the UI (`5173`) and API (`8000`). Postgres, Redis, and LDAP stay on the internal network. Reverse proxy TLS via `APP_BASE_URL` / `FRONTEND_URL`.

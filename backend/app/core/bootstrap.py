@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.crypto import encrypt_secret
 from app.core.security import hash_password
 from app.models import AppSetting, Permission, Role, User, UserRole
 
@@ -12,6 +13,7 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
         "users:read": "Read users",
         "users:write": "Create or update users",
         "roles:read": "Read role metadata",
+        "roles:write": "Create or update role permissions",
         "settings:read": "View platform settings",
         "settings:write": "Update platform settings",
         "audit:read": "Read audit logs",
@@ -37,14 +39,11 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
     db.commit()
 
     default_roles = {
-        "admin": [
+        "admin": list(default_permissions.keys()),
+        "operator": [
             "users:read",
-            "users:write",
-            "roles:read",
             "settings:read",
-            "settings:write",
             "audit:read",
-            "tokens:write",
             "ipam:read",
             "ipam:write",
             "inventory:read",
@@ -58,19 +57,35 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
             "ldap:read",
             "ldap:write",
         ],
-        "operator": ["users:read", "settings:read", "audit:read", "ipam:read", "ipam:write", "inventory:read", "inventory:write", "dns:read", "dns:write", "dhcp:read", "dhcp:write", "pki:read", "pki:write", "ldap:read", "ldap:write"],
-        "viewer": ["users:read", "settings:read", "ipam:read", "inventory:read", "dns:read", "dhcp:read", "pki:read", "ldap:read"],
+        "viewer": [
+            "users:read",
+            "settings:read",
+            "ipam:read",
+            "inventory:read",
+            "dns:read",
+            "dhcp:read",
+            "pki:read",
+            "ldap:read",
+        ],
     }
 
     for role_name, permission_names in default_roles.items():
         role = db.query(Role).filter(Role.name == role_name).first()
+        created = False
         if role is None:
             role = Role(name=role_name, description=f"{role_name.title()} role")
             db.add(role)
             db.flush()
+            created = True
 
         permissions = db.query(Permission).filter(Permission.name.in_(permission_names)).all()
-        role.permissions = permissions
+        if created:
+            role.permissions = permissions
+        else:
+            existing_names = {permission.name for permission in role.permissions}
+            for permission in permissions:
+                if permission.name not in existing_names:
+                    role.permissions.append(permission)
 
     db.commit()
 
@@ -122,23 +137,34 @@ def ensure_bundled_ldap_server(db: Session) -> None:
     """Seed a config entry for the bundled OpenLDAP container if it doesn't exist."""
     try:
         from app.models import LdapServer
-        if db.query(LdapServer).filter(LdapServer.name == "NexusOps Bundled LDAP").first():
+
+        existing = db.query(LdapServer).filter(LdapServer.name == "NexusOps Bundled LDAP").first()
+        if existing:
+            if existing.bind_password and not str(existing.bind_password).startswith("enc:"):
+                existing.bind_password = encrypt_secret(existing.bind_password)
+                db.commit()
+            if not existing.group_search_base:
+                existing.group_search_base = f"ou=groups,{settings.ldap_base_dn}"
+                db.commit()
             return
-        db.add(LdapServer(
-            name="NexusOps Bundled LDAP",
-            host="openldap",
-            port=389,
-            use_ssl=False,
-            use_tls=False,
-            base_dn=settings.ldap_base_dn,
-            bind_dn=f"cn=admin,{settings.ldap_base_dn}",
-            bind_password=settings.ldap_admin_password,
-            user_search_base=f"ou=users,{settings.ldap_base_dn}",
-            user_filter="(objectClass=inetOrgPerson)",
-            user_attr_map='{"username":"uid","email":"mail","full_name":"cn"}',
-            status="active",
-            notes="Auto-seeded bundled OpenLDAP container",
-        ))
+        db.add(
+            LdapServer(
+                name="NexusOps Bundled LDAP",
+                host="openldap",
+                port=389,
+                use_ssl=False,
+                use_tls=False,
+                base_dn=settings.ldap_base_dn,
+                bind_dn=f"cn=admin,{settings.ldap_base_dn}",
+                bind_password=encrypt_secret(settings.ldap_admin_password),
+                user_search_base=f"ou=users,{settings.ldap_base_dn}",
+                user_filter="(objectClass=inetOrgPerson)",
+                user_attr_map='{"username":"uid","email":"mail","full_name":"cn"}',
+                group_search_base=f"ou=groups,{settings.ldap_base_dn}",
+                status="active",
+                notes="Auto-seeded bundled OpenLDAP container",
+            )
+        )
         db.commit()
-    except Exception:  # pragma: no cover – LDAP table may not exist on older migrations
+    except Exception:
         db.rollback()

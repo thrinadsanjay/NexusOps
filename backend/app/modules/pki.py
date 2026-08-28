@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_permission
+from app.core.dependencies import require_permission
 from app.db import get_db
 from app.models import Certificate, CertificateAuthority
 from app.schemas import (
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1/pki", tags=["pki"])
 # ── Certificate Authorities ───────────────────────────────────────────────────
 
 @router.get("/cas", response_model=list[CertificateAuthorityRead])
-def list_cas(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> list[CertificateAuthority]:
+def list_cas(db: Session = Depends(get_db), _: object = Depends(require_permission("pki:read"))) -> list[CertificateAuthority]:
     return db.query(CertificateAuthority).order_by(CertificateAuthority.name).all()
 
 
@@ -65,8 +65,10 @@ def list_certificates(
     status_filter: str | None = Query(default=None, alias="status"),
     expiring_days: int | None = Query(default=None, description="Show certs expiring within N days"),
     q: str | None = Query(default=None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("pki:read")),
 ) -> list[Certificate]:
     query = db.query(Certificate)
     if ca_id is not None:
@@ -82,9 +84,9 @@ def list_certificates(
     if expiring_days is not None:
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None)
         from datetime import timedelta
-        limit = cutoff + timedelta(days=expiring_days)
-        query = query.filter(Certificate.expires_at.isnot(None), Certificate.expires_at <= limit, Certificate.status == "active")
-    return query.order_by(Certificate.expires_at.asc().nullslast()).all()
+        expiring_before = cutoff + timedelta(days=expiring_days)
+        query = query.filter(Certificate.expires_at.isnot(None), Certificate.expires_at <= expiring_before, Certificate.status == "active")
+    return query.order_by(Certificate.expires_at.asc().nullslast()).offset(offset).limit(limit).all()
 
 
 @router.post("/certificates", response_model=CertificateRead, status_code=status.HTTP_201_CREATED)
@@ -97,7 +99,7 @@ def create_certificate(payload: CertificateCreate, db: Session = Depends(get_db)
 
 
 @router.get("/certificates/{cert_id}", response_model=CertificateRead)
-def get_certificate(cert_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> Certificate:
+def get_certificate(cert_id: int, db: Session = Depends(get_db), _: object = Depends(require_permission("pki:read"))) -> Certificate:
     cert = db.query(Certificate).filter(Certificate.id == cert_id).first()
     if not cert:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Certificate not found")
@@ -137,7 +139,7 @@ def revoke_certificate(cert_id: int, db: Session = Depends(get_db), _: object = 
 # ── Expiry summary ────────────────────────────────────────────────────────────
 
 @router.get("/expiry-summary", response_model=dict)
-def expiry_summary(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> dict:
+def expiry_summary(db: Session = Depends(get_db), _: object = Depends(require_permission("pki:read"))) -> dict:
     from datetime import timedelta
     now = datetime.utcnow()
     active = db.query(func.count(Certificate.id)).filter(Certificate.status == "active").scalar() or 0

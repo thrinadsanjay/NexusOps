@@ -2,20 +2,56 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+html.light {
+  color-scheme: light;
+  --nx-canvas: 244 246 251;
+  --nx-surface: 255 255 255;
+  --nx-elevated: 241 244 250;
+  --nx-ink: 15 23 42;
+  --nx-muted: 71 85 105;
+  --nx-faint: 100 116 139;
+  --nx-line: 226 232 240;
+  --nx-accent: 79 70 229;
+  --nx-accent-fg: 255 255 255;
+  --nx-accent-soft: 238 242 255;
+  --nx-ok: 5 150 105;
+  --nx-warn: 180 83 9;
+  --nx-danger: 220 38 38;
+}
+
+html.dark {
   color-scheme: dark;
+  --nx-canvas: 10 14 26;
+  --nx-surface: 17 24 39;
+  --nx-elevated: 24 33 52;
+  --nx-ink: 241 245 249;
+  --nx-muted: 148 163 184;
+  --nx-faint: 100 116 139;
+  --nx-line: 51 65 85;
+  --nx-accent: 129 140 248;
+  --nx-accent-fg: 15 23 42;
+  --nx-accent-soft: 30 27 75;
+  --nx-ok: 52 211 153;
+  --nx-warn: 251 191 36;
+  --nx-danger: 248 113 113;
+}
+
+:root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  background: #020817;
-  color: #e2e8f0;
+  background: rgb(var(--nx-canvas));
+  color: rgb(var(--nx-ink));
 }
 
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   min-height: 100%;
   min-width: 100%;
-  background: #020817;
+  background: rgb(var(--nx-canvas));
 }
 
 body {
@@ -24,4 +60,97 @@ body {
 
 a {
   text-decoration: none;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100%;
+  z-index: 100;
+  border-radius: 0.5rem;
+  background: rgb(var(--nx-accent));
+  color: rgb(var(--nx-accent-fg));
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--nx-accent));
+  outline-offset: 2px;
+}
+
+.nx-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(var(--nx-accent));
+}
+
+.nx-title {
+  margin-top: 0.5rem;
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: rgb(var(--nx-ink));
+}
+
+.nx-card {
+  border-radius: 1rem;
+  border: 1px solid rgb(var(--nx-line));
+  background: rgb(var(--nx-surface));
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px rgb(15 23 42 / 0.06);
+}
+
+.nx-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(var(--nx-line));
+  background: rgb(var(--nx-canvas));
+  padding: 0.625rem 0.75rem;
+  color: rgb(var(--nx-ink));
+  outline: none;
+}
+
+.nx-input:focus {
+  border-color: rgb(var(--nx-accent));
+  box-shadow: 0 0 0 2px rgb(var(--nx-accent) / 0.2);
+}
+
+.nx-input::placeholder {
+  color: rgb(var(--nx-faint));
+}
+
+.nx-btn-primary {
+  border-radius: 0.75rem;
+  background: rgb(var(--nx-accent));
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  color: rgb(var(--nx-accent-fg));
+}
+
+.nx-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.nx-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.nx-btn-ghost {
+  border-radius: 0.75rem;
+  border: 1px solid rgb(var(--nx-line));
+  background: rgb(var(--nx-surface));
+  padding: 0.625rem 1rem;
+  font-weight: 500;
+  color: rgb(var(--nx-ink));
+}
+
+.nx-btn-ghost:hover {
+  background: rgb(var(--nx-elevated));
 }

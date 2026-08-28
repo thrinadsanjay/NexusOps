@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import ipaddress
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_permission
+from app.core.config import settings
+from app.core.dependencies import require_permission
 from app.db import get_db
 from app.models import IPAddress, Subnet, VLan
 from app.schemas import (
@@ -31,10 +32,12 @@ router = APIRouter(prefix="/api/v1/ipam", tags=["ipam"])
 
 @router.get("/vlans", response_model=list[VLanRead])
 def list_vlans(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> list[VLan]:
-    return db.query(VLan).order_by(VLan.vid).all()
+    return db.query(VLan).order_by(VLan.vid).offset(offset).limit(limit).all()
 
 
 @router.post("/vlans", response_model=VLanRead, status_code=status.HTTP_201_CREATED)
@@ -56,7 +59,7 @@ def create_vlan(
 def get_vlan(
     vlan_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> VLan:
     vlan = db.query(VLan).filter(VLan.id == vlan_id).first()
     if not vlan:
@@ -98,10 +101,12 @@ def delete_vlan(
 
 @router.get("/subnets", response_model=list[SubnetRead])
 def list_subnets(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> list[Subnet]:
-    return db.query(Subnet).order_by(Subnet.cidr).all()
+    return db.query(Subnet).order_by(Subnet.cidr).offset(offset).limit(limit).all()
 
 
 @router.post("/subnets", response_model=SubnetRead, status_code=status.HTTP_201_CREATED)
@@ -125,7 +130,7 @@ def create_subnet(
 def get_subnet(
     subnet_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> Subnet:
     subnet = db.query(Subnet).filter(Subnet.id == subnet_id).first()
     if not subnet:
@@ -168,13 +173,15 @@ def delete_subnet(
 @router.get("/addresses", response_model=list[IPAddressRead])
 def list_addresses(
     subnet_id: int | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> list[IPAddress]:
     q = db.query(IPAddress)
     if subnet_id is not None:
         q = q.filter(IPAddress.subnet_id == subnet_id)
-    return q.order_by(IPAddress.address).all()
+    return q.order_by(IPAddress.address).offset(offset).limit(limit).all()
 
 
 @router.post("/addresses", response_model=IPAddressRead, status_code=status.HTTP_201_CREATED)
@@ -196,7 +203,7 @@ def create_address(
 def get_address(
     ip_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> IPAddress:
     ip = db.query(IPAddress).filter(IPAddress.id == ip_id).first()
     if not ip:
@@ -240,7 +247,7 @@ def delete_address(
 def subnet_utilization(
     subnet_id: int,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> SubnetUtilization:
     subnet = db.query(Subnet).filter(Subnet.id == subnet_id).first()
     if not subnet:
@@ -269,7 +276,7 @@ def subnet_utilization(
 @router.get("/utilization", response_model=list[SubnetUtilization])
 def all_subnet_utilization(
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> list[SubnetUtilization]:
     subnets = db.query(Subnet).all()
     result = []
@@ -307,6 +314,23 @@ def trigger_subnet_scan(
     if not subnet:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subnet not found")
 
+    try:
+        network = ipaddress.ip_network(subnet.cidr, strict=False)
+        host_count = network.num_addresses
+        if network.version == 4:
+            host_count = max(network.num_addresses - 2, 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid subnet CIDR") from exc
+
+    if host_count > settings.max_scan_hosts:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Scan refused: {subnet.cidr} has {host_count} addresses; "
+                f"maximum allowed is {settings.max_scan_hosts} (/24 or smaller)."
+            ),
+        )
+
     from app.worker import scan_subnet_task
     task = scan_subnet_task.delay(subnet_id)
     return {"task_id": task.id, "status": "queued", "cidr": subnet.cidr}
@@ -315,7 +339,7 @@ def trigger_subnet_scan(
 @router.get("/scan/{task_id}", response_model=dict)
 def scan_status(
     task_id: str,
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> dict:
     from app.worker import celery_app
     result = celery_app.AsyncResult(task_id)
@@ -330,7 +354,7 @@ def scan_status(
 
 @router.get("/discover", response_model=list[DiscoveredNetwork])
 def discover_networks(
-    _: object = Depends(get_current_user),
+    _: object = Depends(require_permission("ipam:read")),
 ) -> list[DiscoveredNetwork]:
     """Auto-detect LAN subnets.
     Priority: 1) SCAN_NETWORKS env var, 2) gateway probe, 3) container interfaces.

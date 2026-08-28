@@ -19,6 +19,7 @@ sn: Admin
 uid: nexusadmin
 displayName: NexusOps Admin
 mail: nexusadmin@homelab.local
+employeeType: active
 userPassword: NexusOps2024!
 
 dn: cn=operator1,ou=users,dc=homelab,dc=local
@@ -30,6 +31,7 @@ sn: Operator
 uid: operator1
 displayName: Operator One
 mail: operator1@homelab.local
+employeeType: active
 userPassword: Operator123!
 
 dn: cn=viewer1,ou=users,dc=homelab,dc=local
@@ -41,6 +43,7 @@ sn: Viewer
 uid: viewer1
 displayName: Viewer One
 mail: viewer1@homelab.local
+employeeType: active
 userPassword: Viewer123!
 
 dn: cn=nexusops-admins,ou=groups,dc=homelab,dc=local

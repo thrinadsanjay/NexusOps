@@ -11,8 +11,9 @@ describe('NexusOps app shell', () => {
 
   afterEach(() => {
     if (root) {
+      const current = root
       act(() => {
-        root.unmount()
+        current.unmount()
       })
     }
     container?.remove()
@@ -34,7 +35,11 @@ describe('NexusOps app shell', () => {
     })
 
     expect(container.textContent).toContain('Welcome back')
+    expect(container.textContent).toContain('Sign in to NexusOps')
     expect(container.querySelector('input[name="username"]')).not.toBeNull()
     expect(container.querySelector('input[name="password"]')).not.toBeNull()
+    expect(container.querySelector('button[type="submit"]')?.textContent).toContain('Sign in')
+    expect(container.querySelector('button[aria-label*="theme"]')).not.toBeNull()
+    expect(container.querySelector('footer')).not.toBeNull()
   })
 })

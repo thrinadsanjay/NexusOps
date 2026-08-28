@@ -1,31 +1,40 @@
 # Development Guide
 
-## Local setup
+## Local backend
 
 ```bash
-cd NexusOps/backend
+cd backend
 python -m pip install -r requirements.txt
 PYTHONPATH=. python -m pytest -q
 PYTHONPATH=. python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## Frontend setup
+SQLite is the default database for local pytest (`sqlite:///./nexusops.db`). Use unique usernames/emails in tests (`@example.com`).
+
+## Frontend
 
 ```bash
-cd NexusOps/frontend
+cd frontend
 npm install
+npm run test
+npm run build
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
+
+`VITE_API_BASE_URL` controls API and docs links. Auth tokens live in `sessionStorage`.
 
 ## Docker Compose
 
 ```bash
-cd NexusOps
+cp .env.example .env
 docker compose up --build
 ```
 
-## Notes
+OpenLDAP bootstrap LDIF is mounted into the osixia container and applied on first empty data volume (`--copy-service`). Directory management is in the NexusOps UI at `/ldap`.
 
-- Environment variables are defined in `.env` from `.env.example`.
-- The Phase 0 foundation intentionally exposes only health endpoints.
-- Future modules will be added under `backend/app/modules/` and consumed by the same service APIs.
+## Layout
+
+- `backend/app/api/v1/router.py` — auth, users, roles, audit, settings, tokens
+- `backend/app/modules/` — ipam, inventory, dns, dhcp, pki, ldap, dashboard
+- `backend/app/core/ldap_directory.py` — OpenLDAP user/group/OU operations
+- `frontend/src/Ldap.tsx` — directory manager UI

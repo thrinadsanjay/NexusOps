@@ -2,21 +2,27 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.bootstrap import ensure_admin_user
-from app.core.dependencies import get_current_user, require_permission
+from app.core.config import settings
+from app.core.dependencies import COOKIE_NAME, get_current_user, require_permission
+from app.core.ldap_utils import apply_ldap_groups_to_user, assign_role_to_user, connect_ldap
+from app.core.ldap_directory import is_account_disabled, user_dn
+from app.core.rate_limit import login_limiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import get_db
 from app.models import ApiToken, AppSetting, AuditLog, Permission, Role, User, UserSession
 from app.schemas import (
     ApiTokenCreate,
+    ApiTokenCreated,
     ApiTokenRead,
     AuditLogRead,
     AuthToken,
+    ChangePasswordRequest,
     LoginRequest,
     PermissionRead,
     RolePermissionUpdate,
@@ -25,87 +31,133 @@ from app.schemas import (
     UserCreate,
     UserRead,
     UserRoleUpdate,
-    UserUpdate,
 )
 
 router = APIRouter(prefix="/api/v1")
 
 
-def _try_ldap_auth(username: str, password: str, db: Session) -> bool:
-    """Attempt LDAP bind for the given credentials against all active LDAP servers."""
+def _client_key(request: Request, username: str) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else "unknown")
+    return f"{ip}:{username.lower()}"
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
+
+
+def _try_ldap_auth(username: str, password: str, db: Session) -> tuple[bool, object | None, str | None]:
+    """Return (ok, ldap_server, user_dn) for the first successful bind."""
     try:
-        from ldap3 import ANONYMOUS, Connection, Server, SIMPLE  # type: ignore[import-untyped]
         from app.models import LdapServer
+
         servers = db.query(LdapServer).filter(LdapServer.status == "active").all()
         for ldap_srv in servers:
-            try:
-                srv = Server(ldap_srv.host, port=ldap_srv.port, use_ssl=ldap_srv.use_ssl, connect_timeout=3)
-                search_base = ldap_srv.user_search_base or ldap_srv.base_dn
-                for dn_tmpl in [f"uid={username},{search_base}", f"cn={username},{search_base}"]:
-                    conn = Connection(srv, user=dn_tmpl, password=password, authentication=SIMPLE, receive_timeout=5)
-                    if conn.bind():
-                        conn.unbind()
-                        return True
-            except Exception:
-                continue
+            search_base = ldap_srv.user_search_base or ldap_srv.base_dn
+            candidates = [
+                user_dn(username, ldap_srv),
+                f"uid={username},{search_base}",
+                f"cn={username},{search_base}",
+            ]
+            seen: set[str] = set()
+            for dn_tmpl in candidates:
+                if dn_tmpl in seen:
+                    continue
+                seen.add(dn_tmpl)
+                try:
+                    conn = connect_ldap(ldap_srv, bind_dn=dn_tmpl, password=password)
+                    try:
+                        from ldap3 import BASE
+
+                        conn.search(
+                            dn_tmpl,
+                            "(objectClass=*)",
+                            search_scope=BASE,
+                            attributes=["employeeType", "pwdAccountLockedTime"],
+                            size_limit=1,
+                        )
+                        if conn.entries and is_account_disabled(conn.entries[0].entry_attributes_as_dict):
+                            conn.unbind()
+                            return False, None, None
+                    except Exception:
+                        pass
+                    conn.unbind()
+                    return True, ldap_srv, dn_tmpl
+                except Exception:
+                    continue
     except Exception:
         pass
-    return False
+    return False, None, None
 
 
 def _provision_ldap_user(username: str, db: Session) -> User | None:
-    """Create a minimal NexusOps User record for an LDAP-authenticated user."""
-    try:
-        existing = db.query(User).filter(User.username == username).first()
-        if existing:
-            return existing
-        new_user = User(
-            username=username,
-            email=f"{username}@ldap.homelab.local",
-            full_name=username,
-            password_hash=hash_password(f"__ldap__{username}"),  # non-usable local password
-            is_active=True,
-            is_superuser=False,
-        )
-        db.add(new_user)
-        db.flush()
-        return new_user
-    except Exception:
-        return None
-
-
-@router.on_event("startup")
-def startup() -> None:
-    db = next(get_db())
-    ensure_admin_user(db)
+    existing = db.query(User).filter(User.username == username).first()
+    if existing:
+        return existing
+    new_user = User(
+        username=username,
+        email=f"{username}@ldap.homelab.local",
+        full_name=username,
+        password_hash=hash_password(secrets.token_urlsafe(32)),
+        is_active=True,
+        is_superuser=False,
+    )
+    db.add(new_user)
+    db.flush()
+    return new_user
 
 
 @router.post("/auth/login", response_model=AuthToken)
-def login(payload: LoginRequest, db: Session = Depends(get_db), response: Response = None) -> AuthToken:
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> AuthToken:
+    key = _client_key(request, payload.username)
+    login_limiter.check(key)
+
     user = db.query(User).filter((User.username == payload.username) | (User.email == payload.username)).first()
-    authenticated = user and verify_password(payload.password, user.password_hash)
+    authenticated = bool(user and verify_password(payload.password, user.password_hash))
+    auth_source = "local"
+    ldap_server = None
+    user_dn = None
 
     if not authenticated:
-        # LDAP fallback – try every active LDAP server
-        authenticated = _try_ldap_auth(payload.username, payload.password, db)
-        if authenticated and not user:
-            # Auto-provision user from LDAP on first login
-            user = _provision_ldap_user(payload.username, db)
-        elif not authenticated:
+        authenticated, ldap_server, user_dn = _try_ldap_auth(payload.username, payload.password, db)
+        if authenticated:
+            auth_source = "ldap"
+            if not user:
+                user = _provision_ldap_user(payload.username, db)
+        else:
+            login_limiter.record_failure(key)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
     if not user:
+        login_limiter.record_failure(key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
-    token = create_access_token(str(user.id), user.id)
-    session_token = secrets.token_urlsafe(32)
+    if auth_source == "ldap" and ldap_server is not None and user_dn:
+        try:
+            conn = connect_ldap(ldap_server, bind_dn=user_dn, password=payload.password)
+            apply_ldap_groups_to_user(db, user, ldap_server, user_dn, conn)
+            conn.unbind()
+        except Exception:
+            if not user.roles:
+                assign_role_to_user(db, user, "viewer")
+
+    jti = str(uuid.uuid4())
+    token = create_access_token(str(user.id), user.id, jti=jti)
     db.add(
         UserSession(
             user_id=user.id,
-            session_token=session_token,
-            user_agent="unknown",
-            ip_address="unknown",
-            expires_at=datetime.utcnow() + timedelta(days=1),
+            session_token=jti,
+            user_agent=(request.headers.get("user-agent") or "unknown")[:255],
+            ip_address=(request.client.host if request.client else "unknown"),
+            expires_at=datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes),
         )
     )
     db.add(
@@ -114,25 +166,54 @@ def login(payload: LoginRequest, db: Session = Depends(get_db), response: Respon
             action="USER_LOGIN",
             resource="auth",
             resource_id=str(user.id),
-            details="User signed in via local authentication",
-            source="web",
+            details=f"User signed in via {auth_source} authentication",
+            source=auth_source,
             success=True,
         )
     )
     db.commit()
+    login_limiter.reset(key)
+    _set_session_cookie(response, token)
+    from sqlalchemy.orm import joinedload
 
-    if response is not None:
-        response.set_cookie(key="nexusops_token", value=token, httponly=True, samesite="lax")
-
-    return AuthToken(
-        access_token=token,
-        user=UserRead.model_validate(user),
+    user = (
+        db.query(User)
+        .options(joinedload(User.roles).joinedload(Role.permissions))
+        .filter(User.id == user.id)
+        .first()
     )
+    return AuthToken(access_token=token, user=UserRead.from_user(user))
 
 
 @router.post("/auth/logout")
-def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, str]:
-    db.query(UserSession).filter(UserSession.user_id == current_user.id).delete()
+def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    raw_token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        raw_token = auth_header.split(" ", 1)[1].strip()
+    if not raw_token:
+        raw_token = request.cookies.get(COOKIE_NAME)
+
+    jti = None
+    if raw_token and not raw_token.startswith("nxo_"):
+        try:
+            from app.core.security import decode_access_token
+
+            jti = decode_access_token(raw_token).get("jti")
+        except Exception:
+            jti = None
+
+    query = db.query(UserSession).filter(UserSession.user_id == current_user.id, UserSession.revoked_at.is_(None))
+    if jti:
+        query = query.filter(UserSession.session_token == str(jti))
+    now = datetime.utcnow()
+    for session in query.all():
+        session.revoked_at = now
     db.add(
         AuditLog(
             user_id=current_user.id,
@@ -145,12 +226,13 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
         )
     )
     db.commit()
+    response.delete_cookie(COOKIE_NAME, path="/")
     return {"status": "ok", "message": "Logged out"}
 
 
 @router.get("/auth/me", response_model=UserRead)
-def get_me(current_user: User = Depends(get_current_user)) -> User:
-    return current_user
+def get_me(current_user: User = Depends(get_current_user)) -> UserRead:
+    return UserRead.from_user(current_user)
 
 
 @router.post("/users", response_model=UserRead)
@@ -171,6 +253,7 @@ def create_user(
     )
     db.add(user)
     db.flush()
+    assign_role_to_user(db, user, "viewer")
     db.add(
         AuditLog(
             user_id=current_user.id,
@@ -183,6 +266,7 @@ def create_user(
         )
     )
     db.commit()
+    db.refresh(user)
     return user
 
 
@@ -190,9 +274,10 @@ def create_user(
 def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("users:read")),
-) -> list[User]:
+) -> list[UserRead]:
     _ = current_user
-    return db.query(User).order_by(User.created_at.desc()).all()
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    return [UserRead.from_user(user) for user in users]
 
 
 @router.get("/permissions", response_model=list[PermissionRead])
@@ -260,9 +345,8 @@ def assign_role_permissions(
     role_id: int,
     payload: RolePermissionUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("roles:read")),
+    current_user: User = Depends(require_permission("roles:write")),
 ) -> Role:
-    _ = current_user
     role = db.query(Role).filter(Role.id == role_id).first()
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
@@ -287,11 +371,13 @@ def assign_role_permissions(
 
 @router.get("/audit", response_model=list[AuditLogRead])
 def list_audit(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("audit:read")),
 ) -> list[AuditLog]:
     _ = current_user
-    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.get("/settings")
@@ -300,8 +386,8 @@ def list_settings(
     current_user: User = Depends(require_permission("settings:read")),
 ) -> dict[str, str]:
     _ = current_user
-    settings = db.query(AppSetting).all()
-    return {item.key: item.value for item in settings}
+    records = db.query(AppSetting).all()
+    return {item.key: item.value for item in records}
 
 
 @router.put("/settings")
@@ -310,7 +396,6 @@ def save_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("settings:write")),
 ) -> dict[str, str]:
-    _ = current_user
     setting = db.query(AppSetting).filter(AppSetting.key == payload.key).first()
     if setting is None:
         setting = AppSetting(key=payload.key, value=payload.value, description=payload.description)
@@ -334,12 +419,12 @@ def save_setting(
     return {"status": "ok", "key": payload.key, "value": payload.value}
 
 
-@router.post("/api-tokens", response_model=ApiTokenRead)
+@router.post("/api-tokens", response_model=ApiTokenCreated)
 def create_api_token(
     payload: ApiTokenCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("tokens:write")),
-) -> dict[str, object]:
+) -> ApiTokenCreated:
     raw_token = f"nxo_{secrets.token_urlsafe(24)}"
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     expires_at = datetime.utcnow() + timedelta(days=payload.expires_days) if payload.expires_days else None
@@ -352,7 +437,15 @@ def create_api_token(
     )
     db.add(token)
     db.commit()
-    return {"token": raw_token, "name": token.name, "prefix": token.prefix, "expires_at": token.expires_at}
+    db.refresh(token)
+    return ApiTokenCreated(
+        id=token.id,
+        name=token.name,
+        prefix=token.prefix,
+        token=raw_token,
+        expires_at=token.expires_at,
+        is_active=token.is_active,
+    )
 
 
 @router.get("/api-tokens", response_model=list[ApiTokenRead])
@@ -360,20 +453,49 @@ def list_api_tokens(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("tokens:write")),
 ) -> list[ApiToken]:
-    _ = current_user
     return db.query(ApiToken).filter(ApiToken.user_id == current_user.id).all()
+
+
+@router.delete("/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def revoke_api_token(
+    token_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("tokens:write")),
+) -> None:
+    token = (
+        db.query(ApiToken)
+        .filter(ApiToken.id == token_id, ApiToken.user_id == current_user.id)
+        .first()
+    )
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API token not found")
+    token.is_active = False
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="API_TOKEN_REVOKE",
+            resource="api_tokens",
+            resource_id=str(token.id),
+            details=f"Revoked token {token.name}",
+            source="web",
+            success=True,
+        )
+    )
+    db.commit()
 
 
 @router.post("/auth/change-password")
 def change_password(
-    new_password: str,
+    payload: ChangePasswordRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
-    if len(new_password) < 8:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters")
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different")
 
-    current_user.password_hash = hash_password(new_password)
+    current_user.password_hash = hash_password(payload.new_password)
     db.add(
         AuditLog(
             user_id=current_user.id,

@@ -39,6 +39,23 @@ def scan_subnet_task(self, subnet_id: int) -> dict:  # type: ignore[override]
         if not subnet:
             return {"error": "Subnet not found"}
 
+        import ipaddress
+
+        try:
+            network = ipaddress.ip_network(subnet.cidr, strict=False)
+            host_count = network.num_addresses
+            if network.version == 4:
+                host_count = max(network.num_addresses - 2, 0)
+        except ValueError:
+            return {"error": "Invalid subnet CIDR"}
+        if host_count > settings.max_scan_hosts:
+            return {
+                "error": (
+                    f"Scan refused: {subnet.cidr} has {host_count} addresses; "
+                    f"maximum allowed is {settings.max_scan_hosts}"
+                )
+            }
+
         results = scan_network(subnet.cidr)
         now = datetime.utcnow()
         added = updated = 0
