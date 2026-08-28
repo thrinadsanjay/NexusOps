@@ -41,9 +41,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _cors_origins() -> list[str]:
+    origins = {settings.frontend_url.rstrip("/")}
+    for host in ("http://localhost:5173", "http://127.0.0.1:5173"):
+        origins.add(host)
+    return sorted(origins)
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

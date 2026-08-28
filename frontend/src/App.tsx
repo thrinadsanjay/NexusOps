@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { apiFetch, clearAuth, getToken, readStoredUser, storeAuth } from './api/client'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
 import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
@@ -8,20 +8,8 @@ import { DhcpPanel } from './Dhcp'
 import { PkiPanel } from './Pki'
 import { LdapPanel } from './Ldap'
 import { ToolsPanel } from './Tools'
-
-const navItems = [
-  { label: 'Overview', to: '/', permission: null },
-  { label: 'Users', to: '/users', permission: 'users:read' },
-  { label: 'Roles', to: '/roles', permission: 'roles:read' },
-  { label: 'Network', to: '/ipam', permission: 'ipam:read' },
-  { label: 'Inventory', to: '/inventory', permission: 'inventory:read' },
-  { label: 'DNS', to: '/dns', permission: 'dns:read' },
-  { label: 'DHCP', to: '/dhcp', permission: 'dhcp:read' },
-  { label: 'PKI', to: '/pki', permission: 'pki:read' },
-  { label: 'LDAP', to: '/ldap', permission: 'ldap:read' },
-  { label: 'Tools', to: '/tools', permission: null },
-  { label: 'Settings', to: '/settings', permission: 'settings:read' },
-]
+import { AppShell } from './layout/AppShell'
+import { LoginPage } from './layout/LoginPage'
 
 type AuthUser = {
   id: number
@@ -119,7 +107,6 @@ function App() {
   const [apiTokens, setApiTokens] = useState<ApiToken[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [navOpen, setNavOpen] = useState(false)
 
   const isAuthenticated = Boolean(token && user)
 
@@ -352,81 +339,36 @@ function App() {
     setRoles((current) => current.map((role) => (role.id === roleId ? updated : role)))
   }
 
-  const visibleNav = navItems.filter((item) => hasPermission(user, item.permission))
   const canWriteRoles = hasPermission(user, 'roles:write')
   const canWriteUsers = hasPermission(user, 'users:write')
 
+  if (!isAuthenticated) {
+    return <LoginPage onSubmit={handleLogin} loading={loading} error={error} />
+  }
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.14),_transparent_35%),linear-gradient(180deg,_#020817_0%,_#0f172a_100%)] text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-sky-500 to-indigo-500 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20">
-              N
-            </div>
-            <div>
-              <div className="text-lg font-semibold tracking-tight text-white">NexusOps</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Operations Platform</div>
-            </div>
-          </div>
-
-          {isAuthenticated && (
-            <div className="flex items-center gap-2 md:gap-4">
-              <button
-                type="button"
-                className="rounded-full border border-slate-700 px-3 py-2 text-sm text-slate-200 lg:hidden"
-                onClick={() => setNavOpen((open) => !open)}
-              >
-                Menu
-              </button>
-              <div className={`${navOpen ? 'flex' : 'hidden'} absolute left-0 right-0 top-16 z-30 flex-col gap-1 border-b border-slate-800 bg-slate-950 px-6 py-3 lg:static lg:flex lg:flex-row lg:items-center lg:gap-2 lg:border-0 lg:bg-transparent lg:p-0`}>
-                {visibleNav.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setNavOpen(false)}
-                    className={({ isActive }) =>
-                      `rounded-full px-3 py-2 text-sm transition ${isActive ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-full border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white"
-              >
-                Sign out
-              </button>
-            </div>
-          )}
-        </nav>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-10">
+    <AppShell user={user!} canAccess={(permission) => hasPermission(user, permission)} onLogout={handleLogout}>
         <Routes>
-          <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login onSubmit={handleLogin} loading={loading} error={error} />} />
-          <Route path="/" element={isAuthenticated ? <Overview user={user!} /> : <Navigate to="/login" replace />} />
-          <Route path="/users" element={isAuthenticated && hasPermission(user, 'users:read') ? <UsersPanel users={users} roles={roles} canWrite={canWriteUsers} onCreateUser={handleCreateUser} onAssignRoles={handleAssignUserRoles} /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/roles" element={isAuthenticated && hasPermission(user, 'roles:read') ? <RolesPanel roles={roles} permissions={permissions} canWrite={canWriteRoles} onSavePermissions={handleSaveRolePermissions} /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/ipam/vlans" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <VLansPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/ipam/subnets" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <SubnetsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/ipam/addresses" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <IPAddressesPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/ipam" element={isAuthenticated && hasPermission(user, 'ipam:read') ? <NetworkOverview /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/inventory" element={isAuthenticated && hasPermission(user, 'inventory:read') ? <HostsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/inventory/tags" element={isAuthenticated && hasPermission(user, 'inventory:read') ? <TagsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/inventory/groups" element={isAuthenticated && hasPermission(user, 'inventory:read') ? <GroupsPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/dns" element={isAuthenticated && hasPermission(user, 'dns:read') ? <DnsOverview /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/dhcp" element={isAuthenticated && hasPermission(user, 'dhcp:read') ? <DhcpPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/pki" element={isAuthenticated && hasPermission(user, 'pki:read') ? <PkiPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/ldap" element={isAuthenticated && hasPermission(user, 'ldap:read') ? <LdapPanel /> : <Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-          <Route path="/tools" element={isAuthenticated ? <ToolsPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route path="/" element={<Overview user={user!} />} />
+          <Route path="/users" element={hasPermission(user, 'users:read') ? <UsersPanel users={users} roles={roles} canWrite={canWriteUsers} onCreateUser={handleCreateUser} onAssignRoles={handleAssignUserRoles} /> : <Navigate to="/" replace />} />
+          <Route path="/roles" element={hasPermission(user, 'roles:read') ? <RolesPanel roles={roles} permissions={permissions} canWrite={canWriteRoles} onSavePermissions={handleSaveRolePermissions} /> : <Navigate to="/" replace />} />
+          <Route path="/ipam/vlans" element={hasPermission(user, 'ipam:read') ? <VLansPanel /> : <Navigate to="/" replace />} />
+          <Route path="/ipam/subnets" element={hasPermission(user, 'ipam:read') ? <SubnetsPanel /> : <Navigate to="/" replace />} />
+          <Route path="/ipam/addresses" element={hasPermission(user, 'ipam:read') ? <IPAddressesPanel /> : <Navigate to="/" replace />} />
+          <Route path="/ipam" element={hasPermission(user, 'ipam:read') ? <NetworkOverview /> : <Navigate to="/" replace />} />
+          <Route path="/inventory" element={hasPermission(user, 'inventory:read') ? <HostsPanel /> : <Navigate to="/" replace />} />
+          <Route path="/inventory/tags" element={hasPermission(user, 'inventory:read') ? <TagsPanel /> : <Navigate to="/" replace />} />
+          <Route path="/inventory/groups" element={hasPermission(user, 'inventory:read') ? <GroupsPanel /> : <Navigate to="/" replace />} />
+          <Route path="/dns" element={hasPermission(user, 'dns:read') ? <DnsOverview /> : <Navigate to="/" replace />} />
+          <Route path="/dhcp" element={hasPermission(user, 'dhcp:read') ? <DhcpPanel /> : <Navigate to="/" replace />} />
+          <Route path="/pki" element={hasPermission(user, 'pki:read') ? <PkiPanel /> : <Navigate to="/" replace />} />
+          <Route path="/ldap" element={hasPermission(user, 'ldap:read') ? <LdapPanel /> : <Navigate to="/" replace />} />
+          <Route path="/tools" element={<ToolsPanel />} />
           <Route
             path="/settings"
             element={
-              isAuthenticated && hasPermission(user, 'settings:read') ? (
+              hasPermission(user, 'settings:read') ? (
                 <SettingsPanel
                   settings={settings}
                   auditLogs={auditLogs}
@@ -437,118 +379,13 @@ function App() {
                   onChangePassword={handleChangePassword}
                 />
               ) : (
-                <Navigate to={isAuthenticated ? '/' : '/login'} replace />
+                <Navigate to="/" replace />
               )
             }
           />
-          <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </main>
-    </div>
-  )
-}
-
-type LoginProps = {
-  onSubmit: (username: string, password: string) => Promise<void> | void
-  loading: boolean
-  error: string
-}
-
-function Login({ onSubmit, loading, error }: LoginProps) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault()
-    await onSubmit(username, password)
-  }
-
-  return (
-    <div className="flex min-h-[calc(100vh-96px)] items-center justify-center py-10">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-slate-800/80 bg-slate-900/80 shadow-[0_30px_80px_rgba(15,23,42,0.8)] backdrop-blur-sm md:grid-cols-[1.1fr_0.9fr]">
-        <div className="relative overflow-hidden bg-gradient-to-br from-cyan-500/20 via-sky-600/10 to-slate-950 p-8 md:p-10">
-          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-cyan-400/20 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-28 w-28 rounded-full bg-indigo-500/20 blur-3xl" />
-
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-cyan-300">
-              Secure access
-            </div>
-            <h1 className="mt-6 text-4xl font-bold tracking-tight text-white">Welcome back</h1>
-            <p className="mt-4 max-w-md text-base leading-7 text-slate-300">
-              Manage your infrastructure, review operational health, and control access with a trusted local admin experience.
-            </p>
-
-            <div className="mt-8 space-y-4 text-sm text-slate-200">
-              {[
-                'Local authentication with RBAC',
-                'Admin bootstrap and audit logs',
-                'API token and settings management',
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-2xl border border-slate-700/80 bg-slate-900/40 px-3 py-2.5">
-                  <span className="inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-8 md:p-10">
-          <div className="mb-8">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 text-base font-black text-slate-950">
-                N
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">NexusOps</p>
-                <h2 className="mt-1 text-2xl font-bold text-white">Sign in</h2>
-              </div>
-            </div>
-          </div>
-
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="username" className="mb-2 block text-sm font-medium text-slate-200">
-                Username or email
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-200">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
-              />
-            </div>
-
-            {error && <p className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-200">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-3.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+    </AppShell>
   )
 }
 
@@ -581,13 +418,13 @@ function Overview({ user }: { user: AuthUser }) {
   }, [loadStats])
 
   const moduleCards = [
-    { title: 'Network / IPAM', to: '/ipam', icon: 'N', desc: 'Subnets, VLANs, IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30', badge: 'bg-cyan-500/15 text-cyan-300' },
-    { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
+    { title: 'Network', to: '/ipam', icon: 'N', desc: 'VLANs, subnets, DNS, and DHCP', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30', badge: 'bg-cyan-500/15 text-cyan-300' },
+    { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, and tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
     { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
     { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
-    { title: 'PKI', to: '/pki', icon: 'P', desc: 'Certificates and CAs', stat: stats ? `${stats.pki?.active_certs ?? 0} active · ${stats.pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
-    { title: 'LDAP', to: '/ldap', icon: 'L', desc: 'Users, groups, and directory management', stat: stats ? `${stats.ldap?.total_servers ?? 0} directories` : '—', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
-    { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
+    { title: 'Certificates', to: '/pki', icon: 'P', desc: 'CAs and certificate inventory', stat: stats ? `${stats.pki?.active_certs ?? 0} active · ${stats.pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
+    { title: 'Directory', to: '/ldap', icon: 'L', desc: 'Users, groups, and OUs', stat: stats ? `${stats.ldap?.total_servers ?? 0} directories` : '—', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
+    { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and roles', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
     { title: 'Settings', to: '/settings', icon: 'S', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—', panel: 'from-slate-700/40 to-slate-800/20 border-slate-700/60', badge: 'bg-slate-700 text-slate-300' },
   ] as const
 
