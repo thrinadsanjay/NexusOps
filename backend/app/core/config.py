@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     default_admin_username: str = Field(default="admin")
     default_admin_password: str = Field(default="ChangeMe123!")
     # Comma-separated LAN CIDRs to surface in the discover endpoint, e.g. "192.168.1.0/24,10.0.0.0/8"
-    scan_networks: str = Field(default="")
-
+    scan_networks: str = Field(default="")    # Bundled LDAP container
+    ldap_admin_password: str = Field(default="NexusOps2024!")
+    ldap_domain: str = Field(default="homelab.local")
+    ldap_base_dn: str = Field(default="dc=homelab,dc=local")
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
