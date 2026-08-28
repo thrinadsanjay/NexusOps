@@ -83,28 +83,74 @@ a {
   outline-offset: 2px;
 }
 
-@layer components {
-  .nx-kicker {
-    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-accent;
-  }
+.nx-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(var(--nx-accent));
+}
 
-  .nx-title {
-    @apply mt-2 text-3xl font-semibold tracking-tight text-ink;
-  }
+.nx-title {
+  margin-top: 0.5rem;
+  font-size: 1.875rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: rgb(var(--nx-ink));
+}
 
-  .nx-card {
-    @apply rounded-2xl border border-line bg-surface shadow-card;
-  }
+.nx-card {
+  border-radius: 1rem;
+  border: 1px solid rgb(var(--nx-line));
+  background: rgb(var(--nx-surface));
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06), 0 8px 24px rgb(15 23 42 / 0.06);
+}
 
-  .nx-input {
-    @apply w-full rounded-xl border border-line bg-canvas px-3 py-2.5 text-ink outline-none transition placeholder:text-faint focus:border-accent focus:ring-2 focus:ring-accent/20;
-  }
+.nx-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(var(--nx-line));
+  background: rgb(var(--nx-canvas));
+  padding: 0.625rem 0.75rem;
+  color: rgb(var(--nx-ink));
+  outline: none;
+}
 
-  .nx-btn-primary {
-    @apply rounded-xl bg-accent px-4 py-2.5 font-semibold text-accent-fg transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60;
-  }
+.nx-input:focus {
+  border-color: rgb(var(--nx-accent));
+  box-shadow: 0 0 0 2px rgb(var(--nx-accent) / 0.2);
+}
 
-  .nx-btn-ghost {
-    @apply rounded-xl border border-line bg-surface px-4 py-2.5 font-medium text-ink transition hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
-  }
+.nx-input::placeholder {
+  color: rgb(var(--nx-faint));
+}
+
+.nx-btn-primary {
+  border-radius: 0.75rem;
+  background: rgb(var(--nx-accent));
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  color: rgb(var(--nx-accent-fg));
+}
+
+.nx-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.nx-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.nx-btn-ghost {
+  border-radius: 0.75rem;
+  border: 1px solid rgb(var(--nx-line));
+  background: rgb(var(--nx-surface));
+  padding: 0.625rem 1rem;
+  font-weight: 500;
+  color: rgb(var(--nx-ink));
+}
+
+.nx-btn-ghost:hover {
+  background: rgb(var(--nx-elevated));
 }
