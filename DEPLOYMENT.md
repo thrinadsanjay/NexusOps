@@ -18,6 +18,35 @@ docker compose pull
 docker compose up -d
 ```
 
+## New server (published images)
+
+Copy only `docker-compose.server.yml` and `.env.server.example` to the host. No application source tree is required.
+
+```bash
+mkdir -p /opt/nexusops && cd /opt/nexusops
+# copy docker-compose.server.yml and .env.server.example here
+cp .env.server.example .env
+# set PUBLIC_HOST to this server's DNS name or IP, then matching URLs:
+#   APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL
+# rotate POSTGRES_PASSWORD (and DATABASE_URL), JWT_SECRET_KEY, DEFAULT_ADMIN_PASSWORD
+
+echo "$GHCR_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker compose -f docker-compose.server.yml pull
+docker compose -f docker-compose.server.yml up -d
+```
+
+`VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names like `http://backend:8000`. CORS is taken from `FRONTEND_URL`.
+
+Postgres, Redis, and LDAP ports bind to `127.0.0.1` by default. The UI (`FRONTEND_PORT`, default 5173), API (`BACKEND_PORT`, default 8000), and phpLDAPadmin (`LDAPADMIN_PORT`, default 8082) bind on all interfaces.
+
+Optional LDAP directory seed (only if you also copied `ldap-bootstrap/init.ldif` and kept the default `dc=homelab,dc=local` tree):
+
+```bash
+docker compose -f docker-compose.server.yml cp ldap-bootstrap/init.ldif openldap:/tmp/init.ldif
+docker compose -f docker-compose.server.yml exec openldap ldapadd -x \
+  -D "cn=admin,dc=homelab,dc=local" -w "$LDAP_ADMIN_PASSWORD" -f /tmp/init.ldif
+```
+
 `docker compose pull` uses:
 
 | Service | Default image |

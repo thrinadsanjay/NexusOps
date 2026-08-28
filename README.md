@@ -52,7 +52,16 @@ docker compose pull
 docker compose up -d
 ```
 
-See [CI/CD (Docker images)](#cicd-docker-images).
+On a **new server**, copy `docker-compose.server.yml` and `.env.server.example` only:
+
+```bash
+cp .env.server.example .env
+# set PUBLIC_HOST, APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL, and secrets
+docker compose -f docker-compose.server.yml pull
+docker compose -f docker-compose.server.yml up -d
+```
+
+See [CI/CD (Docker images)](#cicd-docker-images) and `DEPLOYMENT.md`.
 
 ---
 
@@ -334,7 +343,10 @@ NexusOps/
 │       └── Tools.tsx             # Integrations portal
 ├── ldap-bootstrap/
 │   └── init.ldif                 # Initial LDAP directory seed (OUs, users, groups)
-├── docker-compose.yml
+├── docker-compose.yml            # Local / source builds
+├── docker-compose.server.yml     # New-server deploy from GHCR images
+├── .env.example
+├── .env.server.example
 └── .env
 ```
 
