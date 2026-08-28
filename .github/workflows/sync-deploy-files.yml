@@ -1,0 +1,80 @@
+# Mirror the three deploy files from Development onto main so a server can
+# `git clone -b main` / `git pull` without copying files by hand.
+#
+# Synced files:
+#   docker-compose.server.yml
+#   README.md
+#   .env.server.example
+#
+# Application source, CI image builds, and the rest of the tree stay on Development.
+
+name: Sync deploy files to main
+
+on:
+  push:
+    branches: [Development]
+    paths:
+      - docker-compose.server.yml
+      - README.md
+      - .env.server.example
+      - .github/workflows/sync-deploy-files.yml
+  workflow_dispatch:
+
+concurrency:
+  group: sync-deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Copy deploy files to main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Development
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: dest
+
+      - name: Copy files and push
+        working-directory: dest
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          files=(
+            docker-compose.server.yml
+            README.md
+            .env.server.example
+          )
+          for f in "${files[@]}"; do
+            if [ ! -f "../source/${f}" ]; then
+              echo "Missing on Development: ${f}"
+              exit 1
+            fi
+            cp "../source/${f}" "./${f}"
+          done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${files[@]}"
+
+          if git diff --cached --quiet; then
+            echo "main already has the current deploy files."
+            exit 0
+          fi
+
+          git commit -m "Sync deploy files from Development (${SOURCE_SHA:0:7})
+
+          Mirrors docker-compose.server.yml, README.md, and .env.server.example.
+          [skip ci]"
+          git push origin HEAD:main

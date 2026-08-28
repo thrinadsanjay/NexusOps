@@ -2,10 +2,10 @@ name: Build and push images
 
 on:
   push:
-    branches: [Development, main]
+    branches: [Development]
     tags: ["v*"]
   pull_request:
-    branches: [Development, main]
+    branches: [Development]
   workflow_dispatch:
 
 concurrency:
@@ -124,7 +124,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/Development' }}
-            type=raw,value=stable,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Backend build args
         id: args

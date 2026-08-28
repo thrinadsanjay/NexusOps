@@ -19,8 +19,8 @@ Current Phase  : Phase 10 (LDAP Integration)
 
 ### Recent additions
 
-- **CI/CD** — GitHub Actions tests the API and UI, then builds and pushes `nexusops-backend` and `nexusops-frontend` to GHCR (`latest` on `Development`, `stable` on `main`). Optional Docker Hub when repository secrets are set.
-- **New-server deploy** — `docker-compose.server.yml` plus `.env.server.example` start the stack from published images. No application source tree is required.
+- **CI/CD** — GitHub Actions tests the API and UI, then builds and pushes `nexusops-backend` and `nexusops-frontend` to GHCR (`latest` on `Development`, plus branch/`sha-*` tags; semver on `v*` tags). Optional Docker Hub when repository secrets are set.
+- **New-server deploy** — `docker-compose.server.yml` plus `.env.server.example` start the stack from published images. Those two files and this README are mirrored to `main` so a server can `git clone -b main` / `git pull` for updates.
 - **LDAP in the product UI** — directory browse, bind test, user sync, and server registry live under **LDAP**. The old phpLDAPadmin sidecar (`nexusops-ldapadmin` on port 8082) is removed. Bundled **OpenLDAP** remains.
 - **Public PyPI builds** — the backend image installs Python packages from `https://pypi.org/simple` unless you override `PIP_INDEX_URL`.
 
@@ -48,11 +48,19 @@ docker compose pull
 docker compose up -d
 ```
 
-### New server (images only)
+### New server (clone `main`)
 
-Copy `docker-compose.server.yml` and `.env.server.example` to the host:
+`main` is a deploy mirror. A workflow copies only these files from `Development` whenever they change:
+
+- `docker-compose.server.yml`
+- `.env.server.example`
+- `README.md`
+
+On the server:
 
 ```bash
+git clone --branch main --single-branch https://github.com/thrinadsanjay/NexusOps.git /opt/nexusops
+cd /opt/nexusops
 cp .env.server.example .env
 # Set PUBLIC_HOST to this server's DNS name or IP, then matching:
 #   APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL
@@ -62,7 +70,18 @@ docker compose -f docker-compose.server.yml pull
 docker compose -f docker-compose.server.yml up -d
 ```
 
-`VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names. See `DEPLOYMENT.md` for GHCR login, package visibility, and LDAP seed on a server.
+Later updates (compose, env template, or this README):
+
+```bash
+cd /opt/nexusops
+git pull
+docker compose -f docker-compose.server.yml pull
+docker compose -f docker-compose.server.yml up -d
+```
+
+Do **not** clone `Development` onto a production host unless you intend to build from source. Application code and image builds stay on `Development`.
+
+`VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names. See `DEPLOYMENT.md` on `Development` for GHCR login, package visibility, and LDAP seed.
 
 | Service | URL |
 |---|---|
@@ -328,7 +347,8 @@ graph TD
 ```
 NexusOps/
 ├── .github/workflows/
-│   └── docker-publish.yml    # Test, build, and push GHCR images
+│   ├── docker-publish.yml     # Test, build, and push GHCR images
+│   └── sync-deploy-files.yml  # Mirror compose/README/env example to main
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/router.py      # Auth + admin API routes
@@ -416,11 +436,12 @@ GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflo
 
 **When images are pushed**
 
-- Pull requests against `Development` or `main`: tests + image **build only** (no push)
+- Pull requests against `Development`: tests + image **build only** (no push)
 - Push to `Development`: push tags `latest`, `development`, and `sha-<git-sha>`
-- Push to `main`: push tags `stable`, `main`, and `sha-<git-sha>`
 - Git tags matching `v*` (for example `v1.2.0`): semver tags (`1.2.0`, `1.2`)
 - **Actions → Run workflow**: same as a push of that ref
+
+`main` does not build images. Workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml) copies `docker-compose.server.yml`, `README.md`, and `.env.server.example` from `Development` onto `main` so deploy hosts can `git pull`.
 
 **Optional Docker Hub**
 

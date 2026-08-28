@@ -18,13 +18,13 @@ docker compose pull
 docker compose up -d
 ```
 
-## New server (published images)
+## New server (clone `main`)
 
-Copy only `docker-compose.server.yml` and `.env.server.example` to the host. No application source tree is required.
+`main` only tracks three files from `Development` (compose, README, env example). Clone it on the host; do not copy files by hand.
 
 ```bash
-mkdir -p /opt/nexusops && cd /opt/nexusops
-# copy docker-compose.server.yml and .env.server.example here
+git clone --branch main --single-branch https://github.com/thrinadsanjay/NexusOps.git /opt/nexusops
+cd /opt/nexusops
 cp .env.server.example .env
 # set PUBLIC_HOST to this server's DNS name or IP, then matching URLs:
 #   APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL
@@ -34,6 +34,8 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-std
 docker compose -f docker-compose.server.yml pull
 docker compose -f docker-compose.server.yml up -d
 ```
+
+To pick up compose or env-template changes later: `git pull` then `docker compose -f docker-compose.server.yml pull && docker compose -f docker-compose.server.yml up -d`.
 
 `VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names like `http://backend:8000`. CORS is taken from `FRONTEND_URL`.
 
@@ -71,11 +73,14 @@ Workflow: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publ
 
 | Event | Tests | Build | Push |
 |---|---|---|---|
-| Pull request to `Development` or `main` | yes | yes | no |
+| Pull request to `Development` | yes | yes | no |
 | Push to `Development` | yes | yes | GHCR (`latest` + branch + `sha-*`) |
-| Push to `main` | yes | yes | GHCR (`stable` + branch + `sha-*`) |
 | Tag `v*` | yes | yes | GHCR (semver tags) |
 | Manual **Run workflow** | yes | yes | GHCR (unless run on a PR ref) |
+
+Pushing those deploy files to `Development` also runs [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml), which copies `docker-compose.server.yml`, `README.md`, and `.env.server.example` onto `main`. Image builds do not run on `main`.
+
+If the sync job cannot push, allow GitHub Actions write access to `main` (**Settings → Actions → General → Workflow permissions**, and any branch-protection rules on `main`).
 
 Optional second registry: set repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. The same image names (`nexusops-backend`, `nexusops-frontend`) are then also pushed to Docker Hub.
 
