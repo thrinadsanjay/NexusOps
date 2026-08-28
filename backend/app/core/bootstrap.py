@@ -18,6 +18,16 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
         "tokens:write": "Create and manage API tokens",
         "ipam:read": "Read IPAM data (VLANs, subnets, IPs)",
         "ipam:write": "Create and manage IPAM data",
+        "inventory:read": "Read inventory hosts, groups, tags",
+        "inventory:write": "Create and manage inventory records",
+        "dns:read": "Read DNS zones and records",
+        "dns:write": "Create and manage DNS zones and records",
+        "dhcp:read": "Read DHCP servers, pools, and leases",
+        "dhcp:write": "Create and manage DHCP configuration and leases",
+        "pki:read": "Read certificate authorities and certificates",
+        "pki:write": "Create and manage certificates and CAs",
+        "ldap:read": "Read LDAP server configurations and sync logs",
+        "ldap:write": "Manage LDAP servers and trigger directory syncs",
     }
 
     for permission_name, description in default_permissions.items():
@@ -37,9 +47,19 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
             "tokens:write",
             "ipam:read",
             "ipam:write",
+            "inventory:read",
+            "inventory:write",
+            "dns:read",
+            "dns:write",
+            "dhcp:read",
+            "dhcp:write",
+            "pki:read",
+            "pki:write",
+            "ldap:read",
+            "ldap:write",
         ],
-        "operator": ["users:read", "settings:read", "audit:read", "ipam:read", "ipam:write"],
-        "viewer": ["users:read", "settings:read", "ipam:read"],
+        "operator": ["users:read", "settings:read", "audit:read", "ipam:read", "ipam:write", "inventory:read", "inventory:write", "dns:read", "dns:write", "dhcp:read", "dhcp:write", "pki:read", "pki:write", "ldap:read", "ldap:write"],
+        "viewer": ["users:read", "settings:read", "ipam:read", "inventory:read", "dns:read", "dhcp:read", "pki:read", "ldap:read"],
     }
 
     for role_name, permission_names in default_roles.items():
@@ -96,3 +116,29 @@ def ensure_system_settings(db: Session) -> None:
         if not db.query(AppSetting).filter(AppSetting.key == key).first():
             db.add(AppSetting(key=key, value=value, description="System setting"))
     db.commit()
+
+
+def ensure_bundled_ldap_server(db: Session) -> None:
+    """Seed a config entry for the bundled OpenLDAP container if it doesn't exist."""
+    try:
+        from app.models import LdapServer
+        if db.query(LdapServer).filter(LdapServer.name == "NexusOps Bundled LDAP").first():
+            return
+        db.add(LdapServer(
+            name="NexusOps Bundled LDAP",
+            host="openldap",
+            port=389,
+            use_ssl=False,
+            use_tls=False,
+            base_dn=settings.ldap_base_dn,
+            bind_dn=f"cn=admin,{settings.ldap_base_dn}",
+            bind_password=settings.ldap_admin_password,
+            user_search_base=f"ou=users,{settings.ldap_base_dn}",
+            user_filter="(objectClass=inetOrgPerson)",
+            user_attr_map='{"username":"uid","email":"mail","full_name":"cn"}',
+            status="active",
+            notes="Auto-seeded bundled OpenLDAP container",
+        ))
+        db.commit()
+    except Exception:  # pragma: no cover – LDAP table may not exist on older migrations
+        db.rollback()

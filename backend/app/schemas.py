@@ -218,3 +218,409 @@ class ScanRequest(BaseModel):
 class DiscoveredNetwork(BaseModel):
     cidr: str
     interface: str
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 – Infrastructure Inventory
+# ---------------------------------------------------------------------------
+
+class HostTagRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    color: str
+
+
+class HostTagCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    color: str = Field(default="cyan", max_length=30)
+
+
+class HostGroupRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    description: str | None = None
+    created_at: datetime
+
+
+class HostGroupCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str | None = None
+
+
+class HostCreate(BaseModel):
+    hostname: str = Field(min_length=1, max_length=255)
+    fqdn: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+    os: str | None = None
+    role: str | None = None
+    status: str = "active"
+    description: str | None = None
+    notes: str | None = None
+    location: str | None = None
+    subnet_id: int | None = None
+    tag_ids: list[int] = []
+    group_ids: list[int] = []
+
+
+class HostUpdate(BaseModel):
+    hostname: str | None = None
+    fqdn: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+    os: str | None = None
+    role: str | None = None
+    status: str | None = None
+    description: str | None = None
+    notes: str | None = None
+    location: str | None = None
+    subnet_id: int | None = None
+    tag_ids: list[int] | None = None
+    group_ids: list[int] | None = None
+
+
+class HostRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    hostname: str
+    fqdn: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+    os: str | None = None
+    role: str | None = None
+    status: str
+    description: str | None = None
+    notes: str | None = None
+    location: str | None = None
+    subnet_id: int | None = None
+    last_seen_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    tags: list[HostTagRead] = []
+    groups: list[HostGroupRead] = []
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 – DNS Management
+# ---------------------------------------------------------------------------
+
+class DnsRecordCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    record_type: str = Field(min_length=1, max_length=10)
+    value: str = Field(min_length=1)
+    ttl: int | None = None
+    priority: int | None = None
+    comment: str | None = None
+
+
+class DnsRecordUpdate(BaseModel):
+    name: str | None = None
+    record_type: str | None = None
+    value: str | None = None
+    ttl: int | None = None
+    priority: int | None = None
+    comment: str | None = None
+
+
+class DnsRecordRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    zone_id: int
+    name: str
+    record_type: str
+    value: str
+    ttl: int | None = None
+    priority: int | None = None
+    comment: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DnsZoneCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    kind: str = "forward"
+    description: str | None = None
+    default_ttl: int = 300
+    status: str = "active"
+
+
+class DnsZoneUpdate(BaseModel):
+    description: str | None = None
+    default_ttl: int | None = None
+    status: str | None = None
+
+
+class DnsZoneRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    kind: str
+    description: str | None = None
+    default_ttl: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    records: list[DnsRecordRead] = []
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 – DHCP
+# ---------------------------------------------------------------------------
+
+class DhcpLeaseRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    pool_id: int | None = None
+    ip_address: str
+    mac_address: str
+    hostname: str | None = None
+    status: str
+    lease_start: datetime | None = None
+    lease_end: datetime | None = None
+    last_seen_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DhcpLeaseCreate(BaseModel):
+    ip_address: str
+    mac_address: str
+    hostname: str | None = None
+    status: str = "active"
+    lease_start: datetime | None = None
+    lease_end: datetime | None = None
+
+
+class DhcpReservationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    pool_id: int
+    ip_address: str
+    mac_address: str
+    hostname: str | None = None
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DhcpReservationCreate(BaseModel):
+    ip_address: str
+    mac_address: str
+    hostname: str | None = None
+    description: str | None = None
+
+
+class DhcpPoolRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    server_id: int
+    subnet: str
+    range_start: str
+    range_end: str
+    gateway: str | None = None
+    dns_servers: str | None = None
+    lease_time: int
+    description: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    leases: list[DhcpLeaseRead] = []
+    reservations: list[DhcpReservationRead] = []
+
+
+class DhcpPoolCreate(BaseModel):
+    subnet: str
+    range_start: str
+    range_end: str
+    gateway: str | None = None
+    dns_servers: str | None = None
+    lease_time: int = 86400
+    description: str | None = None
+
+
+class DhcpPoolUpdate(BaseModel):
+    gateway: str | None = None
+    dns_servers: str | None = None
+    lease_time: int | None = None
+    description: str | None = None
+
+
+class DhcpServerRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    host: str
+    description: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    pools: list[DhcpPoolRead] = []
+
+
+class DhcpServerCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    host: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    status: str = "active"
+
+
+class DhcpServerUpdate(BaseModel):
+    name: str | None = None
+    host: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Phase 9 – PKI
+# ---------------------------------------------------------------------------
+
+class CertificateAuthorityCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    common_name: str = Field(min_length=1, max_length=255)
+    subject: str | None = None
+    is_root: bool = True
+    status: str = "active"
+    expires_at: datetime | None = None
+    notes: str | None = None
+
+
+class CertificateAuthorityUpdate(BaseModel):
+    name: str | None = None
+    status: str | None = None
+    notes: str | None = None
+    expires_at: datetime | None = None
+
+
+class CertificateAuthorityRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    common_name: str
+    subject: str | None = None
+    is_root: bool
+    status: str
+    expires_at: datetime | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CertificateCreate(BaseModel):
+    common_name: str = Field(min_length=1, max_length=255)
+    ca_id: int | None = None
+    subject_alt_names: str | None = None
+    cert_type: str = "server"
+    status: str = "active"
+    serial_number: str | None = None
+    fingerprint: str | None = None
+    issued_to: str | None = None
+    issued_at: datetime | None = None
+    expires_at: datetime | None = None
+    notes: str | None = None
+    host_id: int | None = None
+
+
+class CertificateUpdate(BaseModel):
+    status: str | None = None
+    notes: str | None = None
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
+    fingerprint: str | None = None
+    host_id: int | None = None
+
+
+class CertificateRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    ca_id: int | None = None
+    common_name: str
+    subject_alt_names: str | None = None
+    cert_type: str
+    status: str
+    serial_number: str | None = None
+    fingerprint: str | None = None
+    issued_to: str | None = None
+    issued_at: datetime | None = None
+    expires_at: datetime | None = None
+    revoked_at: datetime | None = None
+    notes: str | None = None
+    host_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 – LDAP
+# ---------------------------------------------------------------------------
+
+class LdapServerCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    host: str = Field(min_length=1, max_length=255)
+    port: int = 389
+    use_ssl: bool = False
+    use_tls: bool = False
+    base_dn: str = Field(min_length=1, max_length=255)
+    bind_dn: str | None = None
+    bind_password: str | None = None
+    user_search_base: str | None = None
+    user_filter: str = "(objectClass=person)"
+    user_attr_map: str = '{"username":"sAMAccountName","email":"mail","full_name":"cn"}'
+    group_search_base: str | None = None
+    status: str = "active"
+    notes: str | None = None
+
+
+class LdapServerUpdate(BaseModel):
+    name: str | None = None
+    host: str | None = None
+    port: int | None = None
+    use_ssl: bool | None = None
+    use_tls: bool | None = None
+    base_dn: str | None = None
+    bind_dn: str | None = None
+    bind_password: str | None = None
+    user_search_base: str | None = None
+    user_filter: str | None = None
+    user_attr_map: str | None = None
+    group_search_base: str | None = None
+    status: str | None = None
+    notes: str | None = None
+
+
+class LdapServerRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    host: str
+    port: int
+    use_ssl: bool
+    use_tls: bool
+    base_dn: str
+    bind_dn: str | None = None
+    # bind_password intentionally excluded from read response
+    user_search_base: str | None = None
+    user_filter: str
+    user_attr_map: str
+    group_search_base: str | None = None
+    status: str
+    last_sync_at: datetime | None = None
+    last_test_at: datetime | None = None
+    last_test_status: str | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class LdapSyncLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    server_id: int
+    status: str
+    users_found: int
+    users_created: int
+    users_updated: int
+    error_message: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None

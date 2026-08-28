@@ -31,6 +31,49 @@ from app.schemas import (
 router = APIRouter(prefix="/api/v1")
 
 
+def _try_ldap_auth(username: str, password: str, db: Session) -> bool:
+    """Attempt LDAP bind for the given credentials against all active LDAP servers."""
+    try:
+        from ldap3 import ANONYMOUS, Connection, Server, SIMPLE  # type: ignore[import-untyped]
+        from app.models import LdapServer
+        servers = db.query(LdapServer).filter(LdapServer.status == "active").all()
+        for ldap_srv in servers:
+            try:
+                srv = Server(ldap_srv.host, port=ldap_srv.port, use_ssl=ldap_srv.use_ssl, connect_timeout=3)
+                search_base = ldap_srv.user_search_base or ldap_srv.base_dn
+                for dn_tmpl in [f"uid={username},{search_base}", f"cn={username},{search_base}"]:
+                    conn = Connection(srv, user=dn_tmpl, password=password, authentication=SIMPLE, receive_timeout=5)
+                    if conn.bind():
+                        conn.unbind()
+                        return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
+
+
+def _provision_ldap_user(username: str, db: Session) -> User | None:
+    """Create a minimal NexusOps User record for an LDAP-authenticated user."""
+    try:
+        existing = db.query(User).filter(User.username == username).first()
+        if existing:
+            return existing
+        new_user = User(
+            username=username,
+            email=f"{username}@ldap.homelab.local",
+            full_name=username,
+            password_hash=hash_password(f"__ldap__{username}"),  # non-usable local password
+            is_active=True,
+            is_superuser=False,
+        )
+        db.add(new_user)
+        db.flush()
+        return new_user
+    except Exception:
+        return None
+
+
 @router.on_event("startup")
 def startup() -> None:
     db = next(get_db())
@@ -40,7 +83,18 @@ def startup() -> None:
 @router.post("/auth/login", response_model=AuthToken)
 def login(payload: LoginRequest, db: Session = Depends(get_db), response: Response = None) -> AuthToken:
     user = db.query(User).filter((User.username == payload.username) | (User.email == payload.username)).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    authenticated = user and verify_password(payload.password, user.password_hash)
+
+    if not authenticated:
+        # LDAP fallback – try every active LDAP server
+        authenticated = _try_ldap_auth(payload.username, payload.password, db)
+        if authenticated and not user:
+            # Auto-provision user from LDAP on first login
+            user = _provision_ldap_user(payload.username, db)
+        elif not authenticated:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+
+    if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
 
     token = create_access_token(str(user.id), user.id)

@@ -41,6 +41,9 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SCAN_NETWORKS: ${SCAN_NETWORKS:-}
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
+      LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
       PYTHONPATH: /app
       PIP_INDEX_URL: https://artifactory.colruyt.int/artifactory/api/pypi/pypi-remote/simple
       PIP_TRUSTED_HOST: artifactory.colruyt.int
@@ -95,6 +98,39 @@ services:
     environment:
       VITE_API_BASE_URL: http://localhost:8000
 
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: nexusops-ldap
+    environment:
+      LDAP_ORGANISATION: "NexusOps Homelab"
+      LDAP_DOMAIN: homelab.local
+      LDAP_BASE_DN: dc=homelab,dc=local
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
+      LDAP_CONFIG_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: readonly
+      LDAP_READONLY_USER_PASSWORD: readonly
+      LDAP_TLS: "false"
+    ports:
+      - "389:389"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+    command: "--loglevel warning"
+
+  ldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: nexusops-ldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "8082:80"
+    depends_on:
+      - openldap
+
 volumes:
   postgres_data:
   redis_data:
+  ldap_data:
+  ldap_config:

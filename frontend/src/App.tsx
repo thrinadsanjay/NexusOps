@@ -1,12 +1,24 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
+import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
+import { DnsOverview } from './Dns'
+import { DhcpPanel } from './Dhcp'
+import { PkiPanel } from './Pki'
+import { LdapPanel } from './Ldap'
+import { ToolsPanel } from './Tools'
 
 const navItems = [
   { label: 'Overview', to: '/' },
   { label: 'Users', to: '/users' },
   { label: 'Roles', to: '/roles' },
   { label: 'Network', to: '/ipam' },
+  { label: 'Inventory', to: '/inventory' },
+  { label: 'DNS', to: '/dns' },
+  { label: 'DHCP', to: '/dhcp' },
+  { label: 'PKI', to: '/pki' },
+  { label: 'LDAP', to: '/ldap' },
+  { label: 'Tools', to: '/tools' },
   { label: 'Settings', to: '/settings' },
 ]
 
@@ -353,6 +365,14 @@ function App() {
           <Route path="/ipam/subnets" element={isAuthenticated ? <SubnetsPanel /> : <Navigate to="/login" replace />} />
           <Route path="/ipam/addresses" element={isAuthenticated ? <IPAddressesPanel /> : <Navigate to="/login" replace />} />
           <Route path="/ipam" element={isAuthenticated ? <NetworkOverview /> : <Navigate to="/login" replace />} />
+          <Route path="/inventory" element={isAuthenticated ? <HostsPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/inventory/tags" element={isAuthenticated ? <TagsPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/inventory/groups" element={isAuthenticated ? <GroupsPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/dns" element={isAuthenticated ? <DnsOverview /> : <Navigate to="/login" replace />} />
+          <Route path="/dhcp" element={isAuthenticated ? <DhcpPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/pki" element={isAuthenticated ? <PkiPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/ldap" element={isAuthenticated ? <LdapPanel /> : <Navigate to="/login" replace />} />
+          <Route path="/tools" element={isAuthenticated ? <ToolsPanel /> : <Navigate to="/login" replace />} />
           <Route
             path="/settings"
             element={
@@ -482,68 +502,119 @@ function Login({ onSubmit, loading, error }: LoginProps) {
 
 function Overview({ user }: { user: AuthUser }) {
   const greeting = useMemo(() => user.full_name || user.username || 'Operator', [user])
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  const token = localStorage.getItem('nexusops_token') ?? ''
 
-  const metricCards = [
-    { label: 'Active users', value: '3', detail: 'Accounts online', accent: 'cyan', badge: 'bg-cyan-500/15 text-cyan-300' },
-    { label: 'Roles', value: '4', detail: 'Permission groups', accent: 'violet', badge: 'bg-violet-500/15 text-violet-300' },
-    { label: 'Audit events', value: '12', detail: 'Last 24 hours', accent: 'emerald', badge: 'bg-emerald-500/15 text-emerald-300' },
-    { label: 'Tokens', value: '2', detail: 'API keys issued', accent: 'amber', badge: 'bg-amber-500/15 text-amber-300' },
+  type Stats = {
+    auth: { total_users: number; active_users: number; total_roles: number; total_permissions: number; active_tokens: number }
+    ipam: { total_vlans: number; total_subnets: number; assigned_ips: number; total_ips: number }
+    inventory: { total_hosts: number; active_hosts: number; unknown_hosts: number }
+    dns: { total_zones: number; forward_zones: number; total_records: number }
+    dhcp: { total_servers: number; total_pools: number; active_leases: number; total_reservations: number }
+    audit: { id: number; action: string; resource: string; success: boolean; created_at: string }[]
+  }
+
+  const [stats, setStats] = useState<Stats | null>(null)
+
+  const loadStats = useCallback(() => {
+    fetch(`${API_BASE_URL}/api/v1/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json()).then(setStats).catch(() => undefined)
+  }, [API_BASE_URL, token])
+
+  useEffect(() => {
+    loadStats()
+    const id = setInterval(loadStats, 30000)
+    return () => clearInterval(id)
+  }, [loadStats])
+
+  const moduleCards = [
+    { title: 'Network / IPAM', to: '/ipam', icon: 'N', desc: 'Subnets, VLANs, IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30', badge: 'bg-cyan-500/15 text-cyan-300' },
+    { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
+    { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
+    { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
+    { title: 'PKI', to: '/pki', icon: 'P', desc: 'Certificates and CAs', stat: stats ? `${(stats as any).pki?.active_certs ?? 0} active · ${(stats as any).pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
+    { title: 'LDAP', to: '/ldap', icon: 'L', desc: 'Directory integration & user sync', stat: 'Browse · Sync · Import', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
+    { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
+    { title: 'Settings', to: '/settings', icon: 'S', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—', panel: 'from-slate-700/40 to-slate-800/20 border-slate-700/60', badge: 'bg-slate-700 text-slate-300' },
   ] as const
 
-  const featureCards = [
-    { title: 'Users', body: 'Manage local accounts and access', icon: 'U', panel: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30', label: 'bg-cyan-500/15 text-cyan-300' },
-    { title: 'Roles', body: 'Assign permissions for admin and operator workflows', icon: 'R', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', label: 'bg-violet-500/15 text-violet-300' },
-    { title: 'Network / IPAM', body: 'VLANs, subnets, and IP address registry', icon: 'N', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', label: 'bg-sky-500/15 text-sky-300' },
-    { title: 'Settings', body: 'Tune platform defaults and brand configuration', icon: 'S', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', label: 'bg-emerald-500/15 text-emerald-300' },
-  ] as const
+  const kpis = stats ? [
+    { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active`, badge: 'bg-emerald-500/15 text-emerald-300' },
+    { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned`, badge: 'bg-cyan-500/15 text-cyan-300' },
+    { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones`, badge: 'bg-indigo-500/15 text-indigo-300' },
+    { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static`, badge: 'bg-amber-500/15 text-amber-300' },
+  ] : []
 
   return (
     <section className="space-y-6">
+      {/* hero */}
       <div className="rounded-[30px] border border-slate-800/80 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Phase 2</p>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Operations control plane</h1>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">NexusOps · Operations Platform</p>
+            <h1 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Welcome, {greeting}</h1>
           </div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            System online
+          <div className="flex items-center gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              All systems online
+            </div>
+            <button onClick={loadStats} className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 transition hover:bg-slate-800">⟳ Refresh</button>
           </div>
         </div>
-
-        <p className="mt-4 max-w-3xl text-base text-slate-300">
-          Signed in as <span className="font-semibold text-white">{greeting}</span>. Local authentication, RBAC, and the platform admin surface are ready for your next workflows.
-        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metricCards.map(({ label, value, detail, badge }) => (
+      {/* live KPI strip */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        {stats === null ? (
+          [0,1,2,3].map((i) => <div key={i} className="h-24 animate-pulse rounded-[24px] border border-slate-800 bg-slate-900/80" />)
+        ) : kpis.map(({ label, value, sub, badge }) => (
           <div key={label} className="rounded-[24px] border border-slate-800 bg-slate-900/80 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
             <div className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${badge}`}>{label}</div>
-            <div className="mt-5 flex items-end justify-between gap-3">
-              <div>
-                <div className="text-3xl font-bold text-white">{value}</div>
-                <div className="mt-1 text-xs text-slate-400">{detail}</div>
-              </div>
-              <div className="rounded-xl border border-slate-700 bg-slate-950/80 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">Live</div>
-            </div>
+            <div className="mt-4 text-3xl font-bold text-white">{value}</div>
+            <div className="mt-1 text-xs text-slate-400">{sub}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {featureCards.map(({ title, body, icon, panel, label }) => (
-          <div
-            key={title}
-            className={`rounded-[26px] border bg-gradient-to-br ${panel} p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] transition hover:-translate-y-1 hover:border-slate-700`}
-          >
-            <div className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl ${label}`}>
-              <span className="text-lg font-bold text-white">{icon}</span>
-            </div>
-            <h2 className="text-xl font-semibold text-white">{title}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+      {/* module cards + audit feed */}
+      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {moduleCards.map(({ title, to, icon, desc, stat, panel, badge }) => (
+            <Link key={title} to={to} className={`rounded-[26px] border bg-gradient-to-br ${panel} p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] transition hover:-translate-y-1`}>
+              <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl ${badge}`}>
+                <span className="text-base font-bold text-white">{icon}</span>
+              </div>
+              <h2 className="text-lg font-semibold text-white">{title}</h2>
+              <p className="mt-1 text-sm text-slate-400">{desc}</p>
+              <p className="mt-3 text-xs font-medium text-slate-300">{stat}</p>
+            </Link>
+          ))}
+        </div>
+
+        {/* audit feed */}
+        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">Recent activity</h3>
+            <Link to="/settings" className="text-[11px] text-slate-400 hover:text-cyan-300">View all →</Link>
           </div>
-        ))}
+          <div className="space-y-2">
+            {!stats || stats.audit.length === 0 ? (
+              <p className="text-sm text-slate-500">No activity yet.</p>
+            ) : stats.audit.map((log) => (
+              <div key={log.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-white">{log.action}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${log.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+                    {log.success ? 'ok' : 'fail'}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[11px] text-slate-400">{log.resource}</div>
+                <div className="mt-1 text-[10px] text-slate-600">{new Date(log.created_at).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   )

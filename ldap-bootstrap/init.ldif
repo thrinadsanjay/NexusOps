@@ -1,0 +1,62 @@
+# NexusOps LDAP bootstrap – organizational units, sample users, and groups
+
+dn: ou=users,dc=homelab,dc=local
+objectClass: organizationalUnit
+ou: users
+description: NexusOps platform users
+
+dn: ou=groups,dc=homelab,dc=local
+objectClass: organizationalUnit
+ou: groups
+description: NexusOps platform groups
+
+dn: cn=nexusadmin,ou=users,dc=homelab,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: nexusadmin
+sn: Admin
+uid: nexusadmin
+displayName: NexusOps Admin
+mail: nexusadmin@homelab.local
+userPassword: NexusOps2024!
+
+dn: cn=operator1,ou=users,dc=homelab,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: operator1
+sn: Operator
+uid: operator1
+displayName: Operator One
+mail: operator1@homelab.local
+userPassword: Operator123!
+
+dn: cn=viewer1,ou=users,dc=homelab,dc=local
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+cn: viewer1
+sn: Viewer
+uid: viewer1
+displayName: Viewer One
+mail: viewer1@homelab.local
+userPassword: Viewer123!
+
+dn: cn=nexusops-admins,ou=groups,dc=homelab,dc=local
+objectClass: groupOfNames
+cn: nexusops-admins
+description: NexusOps administrator group
+member: cn=nexusadmin,ou=users,dc=homelab,dc=local
+
+dn: cn=nexusops-operators,ou=groups,dc=homelab,dc=local
+objectClass: groupOfNames
+cn: nexusops-operators
+description: NexusOps operator group
+member: cn=operator1,ou=users,dc=homelab,dc=local
+
+dn: cn=nexusops-viewers,ou=groups,dc=homelab,dc=local
+objectClass: groupOfNames
+cn: nexusops-viewers
+description: NexusOps read-only viewer group
+member: cn=viewer1,ou=users,dc=homelab,dc=local
