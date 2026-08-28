@@ -8,12 +8,12 @@
 
 ```
 Project Status : Active Development
-Current Phase  : Phase 10 (LDAP Integration)
+Current Phase  : Directory manager + P2 polish
 ```
 
 | State | Areas |
 |---|---|
-| ✅ Implemented | Auth/RBAC, Network/IPAM, DNS, DHCP, Inventory, PKI, LDAP integration, Dashboard, Audit, API tokens, Bundled OpenLDAP directory |
+| ✅ Implemented | Auth/RBAC, Network/IPAM, DNS, DHCP, Inventory, PKI, in-app LDAP directory manager, Dashboard, Audit, API tokens, Bundled OpenLDAP |
 | 🔄 In Progress | Diagnostics (ping/traceroute/port check), SMTP module |
 | 📋 Planned | Ansible automation, n8n integration, Forge integration, PowerDNS backend, Kea DHCP backend, step-ca, SMTP relay (Postfix) |
 
@@ -27,18 +27,15 @@ cp .env.example .env   # or edit .env directly
 
 # 2. Start the full stack
 docker compose up -d --build
-
-# 3. Seed the bundled LDAP directory (first run only)
-docker compose cp ldap-bootstrap/init.ldif openldap:/tmp/init.ldif
-docker compose exec openldap ldapadd -x -D "cn=admin,dc=homelab,dc=local" \
-  -w NexusOps2024! -f /tmp/init.ldif
 ```
+
+OpenLDAP is seeded automatically from `ldap-bootstrap/init.ldif` on first empty volume.
 
 | Service | URL |
 |---|---|
 | NexusOps UI | http://localhost:5173 |
 | NexusOps API + Swagger | http://localhost:8000/docs |
-| phpLDAPadmin | http://127.0.0.1:8082 (localhost only) |
+| Directory Manager | http://localhost:5173/ldap |
 
 PostgreSQL, Redis, and OpenLDAP are attached to the Compose network only and are not published on the host.
 
@@ -166,11 +163,12 @@ PostgreSQL, Redis, and OpenLDAP are attached to the Compose network only and are
 | LDAP server registry (multiple servers) | ✅ |
 | Connection test | ✅ |
 | Directory browse (LDAP filter + results) | ✅ |
+| In-app users / groups / OUs / password reset / enable-disable | ✅ |
 | User sync → NexusOps local accounts | ✅ |
 | Sync history log | ✅ |
 | LDAP auth fallback on NexusOps login | ✅ |
 | Auto-provision LDAP users on first login | ✅ |
-| phpLDAPadmin web UI (bundled) | ✅ |
+| phpLDAPadmin web UI (bundled) | ❌ removed — use `/ldap` |
 | Configurable attribute mapping | ✅ |
 | LDAPS (SSL) | 🔄 (config present, not tested) |
 | LDAP group → NexusOps role mapping | 📋 |
@@ -198,7 +196,7 @@ PostgreSQL, Redis, and OpenLDAP are attached to the Compose network only and are
 | Feature | Status |
 |---|---|
 | Bundled tools directory | ✅ |
-| LDAP Admin (phpLDAPadmin) link + test | ✅ |
+| LDAP Admin (phpLDAPadmin) link + test | ❌ replaced by Directory Manager |
 | API docs link | ✅ |
 | LDAP connection health status | ✅ |
 | Ansible Runner integration | 📋 |
@@ -248,7 +246,6 @@ graph TD
     Worker --> Cache
 
     API -->|ldap3| LDAP["OpenLDAP\n(bundled)"]
-    LDAP -->|HTTP| LDAPAdmin["phpLDAPadmin\n(bundled)"]
 
     API -.->|planned| PowerDNS["PowerDNS"]
     API -.->|planned| Kea["Kea DHCP"]
@@ -278,8 +275,7 @@ graph TD
 | `nexusops-worker` | Custom (Python 3.12) | Celery background worker (subnet scans, sync) | — | Redis + PostgreSQL |
 | `nexusops-postgres` | `postgres:16-alpine` | Primary application database | `5432` | `postgres_data` volume |
 | `nexusops-redis` | `redis:7-alpine` | Celery broker and result backend | `6379` | `redis_data` volume |
-| `nexusops-ldap` | `osixia/openldap:1.5.0` | Bundled OpenLDAP directory server | `389` | `ldap_data`, `ldap_config` volumes |
-| `nexusops-ldapadmin` | `osixia/phpldapadmin:0.9.0` | Web-based LDAP directory manager | `8082` | None |
+| `nexusops-ldap` | `osixia/openldap:1.5.0` | Bundled OpenLDAP directory server | internal | `ldap_data`, `ldap_config` volumes |
 
 ---
 
@@ -321,7 +317,7 @@ NexusOps/
 │       ├── Dhcp.tsx              # DHCP server/pool/lease/reservation manager
 │       ├── Inventory.tsx         # Host, group, and tag panels
 │       ├── Pki.tsx               # Certificate authority + certificate manager
-│       ├── Ldap.tsx              # LDAP server config, browse, sync
+│       ├── Ldap.tsx              # Directory manager (users, groups, OUs, tree, sync)
 │       └── Tools.tsx             # Integrations portal
 ├── ldap-bootstrap/
 │   └── init.ldif                 # Initial LDAP directory seed (OUs, users, groups)
@@ -343,6 +339,7 @@ NexusOps/
 | `000000000006` | Phase 5 — DHCP servers, pools, leases, reservations |
 | `000000000007` | Phase 9 — certificate authorities and certificates |
 | `000000000008` | Phase 10 — LDAP servers and sync logs |
+| `000000000009` | Auth hardening — sessions, encrypted bind passwords |
 
 ---
 

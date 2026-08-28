@@ -65,6 +65,8 @@ def list_certificates(
     status_filter: str | None = Query(default=None, alias="status"),
     expiring_days: int | None = Query(default=None, description="Show certs expiring within N days"),
     q: str | None = Query(default=None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("pki:read")),
 ) -> list[Certificate]:
@@ -82,9 +84,9 @@ def list_certificates(
     if expiring_days is not None:
         cutoff = datetime.now(timezone.utc).replace(tzinfo=None)
         from datetime import timedelta
-        limit = cutoff + timedelta(days=expiring_days)
-        query = query.filter(Certificate.expires_at.isnot(None), Certificate.expires_at <= limit, Certificate.status == "active")
-    return query.order_by(Certificate.expires_at.asc().nullslast()).all()
+        expiring_before = cutoff + timedelta(days=expiring_days)
+        query = query.filter(Certificate.expires_at.isnot(None), Certificate.expires_at <= expiring_before, Certificate.status == "active")
+    return query.order_by(Certificate.expires_at.asc().nullslast()).offset(offset).limit(limit).all()
 
 
 @router.post("/certificates", response_model=CertificateRead, status_code=status.HTTP_201_CREATED)

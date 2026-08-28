@@ -23,6 +23,7 @@ from app.models import (
     DnsZone,
     Host,
     IPAddress,
+    LdapServer,
     Permission,
     Role,
     Subnet,
@@ -116,6 +117,19 @@ def get_dashboard_stats(
             or 0,
         }
 
+    ldap = {"total_servers": 0, "last_ok": 0}
+    if _allowed(current_user, "ldap:read"):
+        ldap = {
+            "total_servers": db.query(func.count(LdapServer.id)).scalar() or 0,
+            "last_ok": db.query(func.count(LdapServer.id)).filter(LdapServer.last_test_status == "ok").scalar() or 0,
+        }
+
+    database = "ok"
+    try:
+        db.query(func.count(User.id)).scalar()
+    except Exception:
+        database = "error"
+
     audit: list[dict] = []
     if _allowed(current_user, "audit:read"):
         recent_audit = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(8).all()
@@ -137,5 +151,7 @@ def get_dashboard_stats(
         "dns": dns,
         "dhcp": dhcp,
         "pki": pki,
+        "ldap": ldap,
+        "health": {"api": "ok", "database": database},
         "audit": audit,
     }

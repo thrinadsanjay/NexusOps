@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_permission
@@ -29,8 +29,13 @@ router = APIRouter(prefix="/api/v1/dhcp", tags=["dhcp"])
 # ── Servers ───────────────────────────────────────────────────────────────────
 
 @router.get("/servers", response_model=list[DhcpServerRead])
-def list_servers(db: Session = Depends(get_db), _: object = Depends(require_permission("dhcp:read"))) -> list[DhcpServer]:
-    return db.query(DhcpServer).order_by(DhcpServer.name).all()
+def list_servers(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: object = Depends(require_permission("dhcp:read")),
+) -> list[DhcpServer]:
+    return db.query(DhcpServer).order_by(DhcpServer.name).offset(offset).limit(limit).all()
 
 
 @router.post("/servers", response_model=DhcpServerRead, status_code=status.HTTP_201_CREATED)
@@ -164,13 +169,15 @@ def delete_reservation(server_id: int, pool_id: int, res_id: int, db: Session = 
 @router.get("/leases", response_model=list[DhcpLeaseRead])
 def all_leases(
     active_only: bool = True,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("dhcp:read")),
 ) -> list[DhcpLease]:
     q = db.query(DhcpLease)
     if active_only:
         q = q.filter(DhcpLease.status == "active")
-    return q.order_by(DhcpLease.ip_address).all()
+    return q.order_by(DhcpLease.ip_address).offset(offset).limit(limit).all()
 
 
 @router.post("/leases/{lease_id}/promote", response_model=DhcpReservationRead)

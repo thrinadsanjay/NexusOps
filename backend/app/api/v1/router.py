@@ -5,12 +5,13 @@ import secrets
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.dependencies import COOKIE_NAME, get_current_user, require_permission
 from app.core.ldap_utils import apply_ldap_groups_to_user, assign_role_to_user, connect_ldap
+from app.core.ldap_directory import is_account_disabled, user_dn
 from app.core.rate_limit import login_limiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import get_db
@@ -61,9 +62,33 @@ def _try_ldap_auth(username: str, password: str, db: Session) -> tuple[bool, obj
         servers = db.query(LdapServer).filter(LdapServer.status == "active").all()
         for ldap_srv in servers:
             search_base = ldap_srv.user_search_base or ldap_srv.base_dn
-            for dn_tmpl in [f"uid={username},{search_base}", f"cn={username},{search_base}"]:
+            candidates = [
+                user_dn(username, ldap_srv),
+                f"uid={username},{search_base}",
+                f"cn={username},{search_base}",
+            ]
+            seen: set[str] = set()
+            for dn_tmpl in candidates:
+                if dn_tmpl in seen:
+                    continue
+                seen.add(dn_tmpl)
                 try:
                     conn = connect_ldap(ldap_srv, bind_dn=dn_tmpl, password=password)
+                    try:
+                        from ldap3 import BASE
+
+                        conn.search(
+                            dn_tmpl,
+                            "(objectClass=*)",
+                            search_scope=BASE,
+                            attributes=["employeeType", "pwdAccountLockedTime"],
+                            size_limit=1,
+                        )
+                        if conn.entries and is_account_disabled(conn.entries[0].entry_attributes_as_dict):
+                            conn.unbind()
+                            return False, None, None
+                    except Exception:
+                        pass
                     conn.unbind()
                     return True, ldap_srv, dn_tmpl
                 except Exception:
@@ -346,11 +371,13 @@ def assign_role_permissions(
 
 @router.get("/audit", response_model=list[AuditLogRead])
 def list_audit(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("audit:read")),
 ) -> list[AuditLog]:
     _ = current_user
-    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).offset(offset).limit(limit).all()
 
 
 @router.get("/settings")

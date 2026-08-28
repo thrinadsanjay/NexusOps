@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -32,10 +32,12 @@ router = APIRouter(prefix="/api/v1/ipam", tags=["ipam"])
 
 @router.get("/vlans", response_model=list[VLanRead])
 def list_vlans(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("ipam:read")),
 ) -> list[VLan]:
-    return db.query(VLan).order_by(VLan.vid).all()
+    return db.query(VLan).order_by(VLan.vid).offset(offset).limit(limit).all()
 
 
 @router.post("/vlans", response_model=VLanRead, status_code=status.HTTP_201_CREATED)
@@ -99,10 +101,12 @@ def delete_vlan(
 
 @router.get("/subnets", response_model=list[SubnetRead])
 def list_subnets(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("ipam:read")),
 ) -> list[Subnet]:
-    return db.query(Subnet).order_by(Subnet.cidr).all()
+    return db.query(Subnet).order_by(Subnet.cidr).offset(offset).limit(limit).all()
 
 
 @router.post("/subnets", response_model=SubnetRead, status_code=status.HTTP_201_CREATED)
@@ -169,13 +173,15 @@ def delete_subnet(
 @router.get("/addresses", response_model=list[IPAddressRead])
 def list_addresses(
     subnet_id: int | None = None,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("ipam:read")),
 ) -> list[IPAddress]:
     q = db.query(IPAddress)
     if subnet_id is not None:
         q = q.filter(IPAddress.subnet_id == subnet_id)
-    return q.order_by(IPAddress.address).all()
+    return q.order_by(IPAddress.address).offset(offset).limit(limit).all()
 
 
 @router.post("/addresses", response_model=IPAddressRead, status_code=status.HTTP_201_CREATED)

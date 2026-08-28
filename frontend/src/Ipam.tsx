@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
+import { confirmDelete } from './confirm'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -295,7 +296,8 @@ export function VLansPanel() {
     setVid(''); setName(''); setDescription('')
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirmDelete(`VLAN "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/ipam/vlans/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setVlans((p) => p.filter((v) => v.id !== id))
   }
@@ -325,7 +327,7 @@ export function VLansPanel() {
                   <td className="px-4 py-4 text-white">{v.name}</td>
                   <td className="px-4 py-4 text-slate-300">{v.description ?? '—'}</td>
                   <td className="px-4 py-4"><StatusBadge status={v.status} /></td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(v.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(v.id, v.name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>
@@ -376,7 +378,8 @@ export function SubnetsPanel() {
     setCidr(''); setName(''); setGateway(''); setVlanId(''); setDescription('')
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirmDelete(`subnet "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/ipam/subnets/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setSubnets((p) => p.filter((s) => s.id !== id))
   }
@@ -412,7 +415,7 @@ export function SubnetsPanel() {
                   <td className="px-4 py-4 text-slate-300">{vlanLabel(s.vlan_id)}</td>
                   <td className="px-4 py-4 min-w-[200px]">{utils[s.id] ? <UtilBar util={utils[s.id]} /> : <div className="h-2 w-full animate-pulse rounded-full bg-slate-800" />}</td>
                   <td className="px-4 py-4"><StatusBadge status={s.status} /></td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(s.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(s.id, s.name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>
@@ -454,7 +457,8 @@ export function IPAddressesPanel() {
     setAddress(''); setSubnetId(''); setHostname(''); setDescription(''); setMac(''); setDnsName('')
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, address: string) => {
+    if (!confirmDelete(`IP address ${address}`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/ipam/addresses/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setIps((p) => p.filter((i) => i.id !== id))
   }
@@ -496,7 +500,7 @@ export function IPAddressesPanel() {
                   <td className="px-4 py-4 font-mono text-slate-300">{ip.mac_address ?? '—'}</td>
                   <td className="px-4 py-4"><StatusBadge status={ip.status} /></td>
                   <td className="px-4 py-4 text-slate-400">{ip.last_seen_at ? new Date(ip.last_seen_at).toLocaleString() : '—'}</td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(ip.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(ip.id, ip.address)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>

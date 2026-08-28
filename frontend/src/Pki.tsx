@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
+import { confirmDelete } from './confirm'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -93,7 +94,8 @@ export function PkiPanel() {
     setCas((p) => [...p, data]); setCaName(''); setCaCn(''); setCaExpiry(''); setShowCaForm(false)
   }
 
-  const handleDeleteCa = async (id: number) => {
+  const handleDeleteCa = async (id: number, name: string) => {
+    if (!confirmDelete(`certificate authority "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/pki/cas/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) { setCas((p) => p.filter((c) => c.id !== id)); if (selectedCa?.id === id) setSelectedCa(null) }
   }
@@ -115,7 +117,8 @@ export function PkiPanel() {
     if (r.ok) { setCerts((p) => p.map((c) => c.id === id ? { ...c, status: 'revoked' } : c)); load() }
   }
 
-  const handleDeleteCert = async (id: number) => {
+  const handleDeleteCert = async (id: number, name: string) => {
+    if (!confirmDelete(`certificate "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/pki/certificates/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) { setCerts((p) => p.filter((c) => c.id !== id)); load() }
   }
@@ -183,17 +186,17 @@ export function PkiPanel() {
           </button>
 
           {cas.map((ca) => (
-            <button key={ca.id} onClick={() => setSelectedCa(ca)} className={`group w-full rounded-2xl border px-4 py-3 text-left transition ${selectedCa?.id === ca.id ? 'border-rose-500/40 bg-rose-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+            <div key={ca.id} role="button" tabIndex={0} onClick={() => setSelectedCa(ca)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSelectedCa(ca) }} className={`group w-full cursor-pointer rounded-2xl border px-4 py-3 text-left transition ${selectedCa?.id === ca.id ? 'border-rose-500/40 bg-rose-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-white">{ca.name}</span>
-                <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteCa(ca.id) }} className="hidden text-[10px] text-rose-400 group-hover:block">✕</button>
+                <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteCa(ca.id, ca.name) }} className="hidden text-[10px] text-rose-400 group-hover:block">✕</button>
               </div>
               <div className="mt-0.5 text-[11px] text-slate-400">{ca.common_name}</div>
               <div className="mt-1 flex items-center gap-2">
                 <StatusPill s={ca.status} />
                 {ca.expires_at && <ExpiryChip iso={ca.expires_at} />}
               </div>
-            </button>
+            </div>
           ))}
         </div>
 
@@ -270,7 +273,7 @@ export function PkiPanel() {
                         {cert.status === 'active' && (
                           <button onClick={() => handleRevoke(cert.id)} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20">Revoke</button>
                         )}
-                        <button onClick={() => handleDeleteCert(cert.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button>
+                        <button onClick={() => handleDeleteCert(cert.id, cert.common_name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button>
                       </td>
                     </tr>
                   )

@@ -562,6 +562,8 @@ function Overview({ user }: { user: AuthUser }) {
     dns: { total_zones: number; forward_zones: number; total_records: number }
     dhcp: { total_servers: number; total_pools: number; active_leases: number; total_reservations: number }
     pki?: { total_cas: number; total_certs: number; active_certs: number; expiring_30d: number }
+    ldap?: { total_servers: number; last_ok: number }
+    health?: { api: string; database: string }
     audit: { id: number; action: string; resource: string; success: boolean; created_at: string }[]
   }
 
@@ -584,7 +586,7 @@ function Overview({ user }: { user: AuthUser }) {
     { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
     { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
     { title: 'PKI', to: '/pki', icon: 'P', desc: 'Certificates and CAs', stat: stats ? `${stats.pki?.active_certs ?? 0} active · ${stats.pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
-    { title: 'LDAP', to: '/ldap', icon: 'L', desc: 'Directory integration & user sync', stat: 'Browse · Sync · Import', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
+    { title: 'LDAP', to: '/ldap', icon: 'L', desc: 'Users, groups, and directory management', stat: stats ? `${stats.ldap?.total_servers ?? 0} directories` : '—', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
     { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
     { title: 'Settings', to: '/settings', icon: 'S', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—', panel: 'from-slate-700/40 to-slate-800/20 border-slate-700/60', badge: 'bg-slate-700 text-slate-300' },
   ] as const
@@ -606,9 +608,9 @@ function Overview({ user }: { user: AuthUser }) {
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Welcome, {greeting}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              All systems online
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${stats?.health?.database === 'error' ? 'border-rose-500/30 bg-rose-500/10 text-rose-300' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'}`}>
+              <span className={`h-2 w-2 rounded-full ${stats?.health?.database === 'error' ? 'bg-rose-400' : 'animate-pulse bg-emerald-400'}`} />
+              {stats?.health?.database === 'error' ? 'Database unavailable' : stats ? 'API healthy' : 'Checking health…'}
             </div>
             <button onClick={loadStats} className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 transition hover:bg-slate-800">⟳ Refresh</button>
           </div>

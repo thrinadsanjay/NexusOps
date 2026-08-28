@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
+import { confirmDelete } from './confirm'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,9 @@ export function HostsPanel() {
   const [filter, setFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [tagFilter, setTagFilter] = useState('')
+  const [groupFilter, setGroupFilter] = useState('')
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [error, setError] = useState('')
@@ -104,19 +108,30 @@ export function HostsPanel() {
     finally { setImporting(false) }
   }
 
+  const resetForm = () => {
+    setHostname(''); setFqdn(''); setIp(''); setMac(''); setOs(''); setRole(''); setLocation(''); setDescription(''); setSelectedTags([]); setSelectedGroups([]); setHostStatus('active'); setEditingId(null); setShowAdd(false)
+  }
+
+  const startEdit = (host: Host) => {
+    setEditingId(host.id); setShowAdd(true); setHostname(host.hostname); setFqdn(host.fqdn ?? ''); setIp(host.ip_address ?? ''); setMac(host.mac_address ?? ''); setOs(host.os ?? ''); setRole(host.role ?? ''); setLocation(host.location ?? ''); setDescription(host.description ?? ''); setHostStatus(host.status); setSelectedTags(host.tags.map((t) => t.id)); setSelectedGroups(host.groups.map((g) => g.id))
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); setError('')
-    const res = await fetch(`${API_BASE_URL}/api/v1/inventory/hosts`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({ hostname, fqdn: fqdn || null, ip_address: ip || null, mac_address: mac || null, os: os || null, role: role || null, location: location || null, description: description || null, status: hostStatus, tag_ids: selectedTags, group_ids: selectedGroups }),
+    const body = { hostname, fqdn: fqdn || null, ip_address: ip || null, mac_address: mac || null, os: os || null, role: role || null, location: location || null, description: description || null, status: hostStatus, tag_ids: selectedTags, group_ids: selectedGroups }
+    const res = await fetch(editingId ? `${API_BASE_URL}/api/v1/inventory/hosts/${editingId}` : `${API_BASE_URL}/api/v1/inventory/hosts`, {
+      method: editingId ? 'PATCH' : 'POST', headers: authHeaders(),
+      body: JSON.stringify(body),
     })
     const data = await res.json()
     if (!res.ok) { setError(data.detail ?? 'Failed'); return }
-    setHosts((p) => [...p, data].sort((a, b) => a.hostname.localeCompare(b.hostname)))
-    setHostname(''); setFqdn(''); setIp(''); setMac(''); setOs(''); setRole(''); setLocation(''); setDescription(''); setSelectedTags([]); setSelectedGroups([]); setShowAdd(false)
+    if (editingId) setHosts((p) => p.map((h) => h.id === editingId ? data : h).sort((a, b) => a.hostname.localeCompare(b.hostname)))
+    else setHosts((p) => [...p, data].sort((a, b) => a.hostname.localeCompare(b.hostname)))
+    resetForm()
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirmDelete(`host "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/hosts/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setHosts((p) => p.filter((h) => h.id !== id))
   }
@@ -128,7 +143,9 @@ export function HostsPanel() {
     const q = filter.toLowerCase()
     const matchesText = !q || h.hostname.toLowerCase().includes(q) || (h.ip_address ?? '').includes(q) || (h.fqdn ?? '').toLowerCase().includes(q) || (h.role ?? '').toLowerCase().includes(q)
     const matchesStatus = !statusFilter || h.status === statusFilter
-    return matchesText && matchesStatus
+    const matchesTag = !tagFilter || h.tags.some((t) => String(t.id) === tagFilter)
+    const matchesGroup = !groupFilter || h.groups.some((g) => String(g.id) === groupFilter)
+    return matchesText && matchesStatus && matchesTag && matchesGroup
   })
 
   const statCounts = {
@@ -151,7 +168,7 @@ export function HostsPanel() {
           <button onClick={handleImport} disabled={importing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
             {importing ? 'Importing…' : '⟳ Import from IPAM'}
           </button>
-          <button onClick={() => setShowAdd((p) => !p)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">
+          <button onClick={() => { if (showAdd) resetForm(); else setShowAdd(true) }} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">
             {showAdd ? '✕ Cancel' : '+ Add host'}
           </button>
         </div>
@@ -187,13 +204,21 @@ export function HostsPanel() {
           <option value="decommissioned">Decommissioned</option>
           <option value="unknown">Unknown</option>
         </select>
+        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400">
+          <option value="">All tags</option>
+          {tags.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400">
+          <option value="">All groups</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
       </div>
 
       {/* add form */}
       {showAdd && (
         <form onSubmit={handleSubmit} className={`${section} grid gap-4 md:grid-cols-2 xl:grid-cols-3`}>
           <div className="md:col-span-2 xl:col-span-3">
-            <p className="text-base font-semibold text-white">Add host</p>
+            <p className="text-base font-semibold text-white">{editingId ? 'Edit host' : 'Add host'}</p>
           </div>
           <div><label className={label}>Hostname *</label><input value={hostname} onChange={(e) => setHostname(e.target.value)} required className={input} /></div>
           <div><label className={label}>IP address</label><input value={ip} onChange={(e) => setIp(e.target.value)} className={`${input} font-mono`} /></div>
@@ -232,7 +257,7 @@ export function HostsPanel() {
 
           {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
           <div className="md:col-span-2 xl:col-span-3 flex justify-end">
-            <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Save host</button>
+            <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">{editingId ? 'Save changes' : 'Save host'}</button>
           </div>
         </form>
       )}
@@ -286,7 +311,10 @@ export function HostsPanel() {
                 <td className="px-4 py-4"><StatusBadge status={host.status} /></td>
                 <td className="px-4 py-4 text-slate-400 text-[11px]">{host.last_seen_at ? new Date(host.last_seen_at).toLocaleString() : '—'}</td>
                 <td className="px-4 py-4 text-right">
-                  <button onClick={() => handleDelete(host.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 transition hover:bg-rose-500/20">Delete</button>
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => startEdit(host)} className="rounded-xl border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800">Edit</button>
+                    <button onClick={() => handleDelete(host.id, host.hostname)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 transition hover:bg-rose-500/20">Delete</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -319,7 +347,8 @@ export function TagsPanel() {
     setName(''); setColor('cyan')
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirmDelete(`tag "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/tags/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setTags((p) => p.filter((t) => t.id !== id))
   }
@@ -353,7 +382,7 @@ export function TagsPanel() {
         {tags.length === 0 ? <p className="text-slate-400">No tags yet.</p> : tags.map((t) => (
           <div key={t.id} className={`flex items-center gap-2 rounded-full border px-3 py-1.5 ${TAG_COLORS[t.color] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
             <span className="text-sm font-medium">{t.name}</span>
-            <button onClick={() => handleDelete(t.id)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+            <button onClick={() => handleDelete(t.id, t.name)} className="text-xs opacity-60 hover:opacity-100">✕</button>
           </div>
         ))}
       </div>
@@ -383,7 +412,8 @@ export function GroupsPanel() {
     setName(''); setDescription('')
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number, groupName: string) => {
+    if (!confirmDelete(`group "${groupName}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/inventory/groups/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setGroups((p) => p.filter((g) => g.id !== id))
   }
@@ -415,7 +445,7 @@ export function GroupsPanel() {
                   <td className="px-4 py-4 font-semibold text-white">{g.name}</td>
                   <td className="px-4 py-4 text-slate-300">{g.description ?? '—'}</td>
                   <td className="px-4 py-4 text-slate-400">{new Date(g.created_at).toLocaleDateString()}</td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(g.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(g.id, g.name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
                 </tr>
               ))}
           </tbody>

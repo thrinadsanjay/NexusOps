@@ -25,8 +25,13 @@ VALID_TYPES = {"A", "AAAA", "CNAME", "MX", "TXT", "PTR", "NS", "SRV", "SOA", "CA
 # ── Zones ─────────────────────────────────────────────────────────────────────
 
 @router.get("/zones", response_model=list[DnsZoneRead])
-def list_zones(db: Session = Depends(get_db), _: object = Depends(require_permission("dns:read"))) -> list[DnsZone]:
-    return db.query(DnsZone).order_by(DnsZone.name).all()
+def list_zones(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: object = Depends(require_permission("dns:read")),
+) -> list[DnsZone]:
+    return db.query(DnsZone).order_by(DnsZone.name).offset(offset).limit(limit).all()
 
 
 @router.post("/zones", response_model=DnsZoneRead, status_code=status.HTTP_201_CREATED)
@@ -71,6 +76,8 @@ def delete_zone(zone_id: int, db: Session = Depends(get_db), _: object = Depends
 def list_records(
     zone_id: int,
     record_type: str | None = Query(default=None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("dns:read")),
 ) -> list[DnsRecord]:
@@ -80,7 +87,7 @@ def list_records(
     q = db.query(DnsRecord).filter(DnsRecord.zone_id == zone_id)
     if record_type:
         q = q.filter(DnsRecord.record_type == record_type.upper())
-    return q.order_by(DnsRecord.record_type, DnsRecord.name).all()
+    return q.order_by(DnsRecord.record_type, DnsRecord.name).offset(offset).limit(limit).all()
 
 
 @router.post("/zones/{zone_id}/records", response_model=DnsRecordRead, status_code=status.HTTP_201_CREATED)

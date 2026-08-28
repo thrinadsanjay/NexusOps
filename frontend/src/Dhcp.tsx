@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
+import { confirmDelete } from './confirm'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,9 @@ export function DhcpPanel() {
   const [lMac, setLMac] = useState('')
   const [lHost, setLHost] = useState('')
   const [lErr, setLErr] = useState('')
+  const [showBulk, setShowBulk] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkMsg, setBulkMsg] = useState('')
 
   const loadServers = useCallback(() => {
     fetch(`${API_BASE_URL}/api/v1/dhcp/servers`, { headers: authHeaders() })
@@ -99,7 +103,8 @@ export function DhcpPanel() {
     if (!r.ok) { setSvrErr(data.detail ?? 'Failed'); return }
     setServers((p) => [...p, data]); setSvrName(''); setSvrHost(''); setSvrDesc(''); setShowServerForm(false)
   }
-  const handleDeleteServer = async (id: number) => {
+  const handleDeleteServer = async (id: number, name: string) => {
+    if (!confirmDelete(`DHCP server "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) { setServers((p) => p.filter((s) => s.id !== id)); if (selected?.id === id) { setSelected(null); setSelectedPool(null) } }
   }
@@ -114,8 +119,9 @@ export function DhcpPanel() {
     setSelected((s) => s ? { ...s, pools: [...s.pools, data] } : s)
     setPSubnet(''); setPStart(''); setPEnd(''); setPGateway(''); setPDns(''); setPLease('86400'); setPDesc(''); setShowPoolForm(false)
   }
-  const handleDeletePool = async (poolId: number) => {
+  const handleDeletePool = async (poolId: number, subnet: string) => {
     if (!selected) return
+    if (!confirmDelete(`DHCP pool ${subnet}`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${poolId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) {
       setServers((prev) => prev.map((s) => s.id === selected.id ? { ...s, pools: s.pools.filter((p) => p.id !== poolId) } : s))
@@ -144,8 +150,9 @@ export function DhcpPanel() {
     setLIp(''); setLMac(''); setLHost(''); setShowLeaseForm(false)
     refreshPool(selected, selectedPool)
   }
-  const handleDeleteLease = async (leaseId: number) => {
+  const handleDeleteLease = async (leaseId: number, address: string) => {
     if (!selected || !selectedPool) return
+    if (!confirmDelete(`lease ${address}`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/leases/${leaseId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) refreshPool(selected, selectedPool)
   }
@@ -159,10 +166,29 @@ export function DhcpPanel() {
     setResIp(''); setResMac(''); setResHost(''); setResDesc(''); setShowResForm(false)
     refreshPool(selected, selectedPool)
   }
-  const handleDeleteReservation = async (resId: number) => {
+  const handleDeleteReservation = async (resId: number, address: string) => {
     if (!selected || !selectedPool) return
+    if (!confirmDelete(`reservation ${address}`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/reservations/${resId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) refreshPool(selected, selectedPool)
+  }
+
+  const handleBulkImport = async (e: FormEvent) => {
+    if (!selected || !selectedPool) return
+    e.preventDefault(); setBulkMsg('')
+    const leases = bulkText.split('\n').map((line) => line.trim()).filter((line) => line && !line.toLowerCase().startsWith('ip')).map((line) => {
+      const [ip_address, mac_address, hostname] = line.split(/[,\t;]/).map((part) => part.trim())
+      return { ip_address, mac_address, hostname: hostname || null, status: 'active' }
+    }).filter((item) => item.ip_address && item.mac_address)
+    if (leases.length === 0) { setBulkMsg('No valid rows. Use ip,mac,hostname per line.'); return }
+    const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/servers/${selected.id}/pools/${selectedPool.id}/leases/bulk`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify(leases),
+    })
+    const data = await r.json()
+    if (!r.ok) { setBulkMsg(typeof data.detail === 'string' ? data.detail : 'Import failed'); return }
+    setBulkMsg(`Imported ${data.added} new and updated ${data.updated} leases`)
+    setBulkText(''); setShowBulk(false)
+    refreshPool(selected, selectedPool)
   }
 
   const handlePromote = async (leaseId: number) => {
@@ -211,23 +237,29 @@ export function DhcpPanel() {
               <p className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-center text-sm text-slate-400">No DHCP servers yet.</p>
             ) : servers.map((svr) => (
               <div key={svr.id} className="rounded-2xl border border-slate-800 bg-slate-900/80">
-                <button onClick={() => handleSelectServer(svr)} className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${selected?.id === svr.id ? 'bg-amber-500/10' : 'hover:bg-slate-800/50'}`}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelectServer(svr)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectServer(svr) }}
+                  className={`group flex w-full cursor-pointer items-center justify-between rounded-2xl px-4 py-3 text-left transition ${selected?.id === svr.id ? 'bg-amber-500/10' : 'hover:bg-slate-800/50'}`}
+                >
                   <div>
                     <div className="font-semibold text-white">{svr.name}</div>
                     <div className="font-mono text-[11px] text-slate-400">{svr.host}</div>
                   </div>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteServer(svr.id) }} className="hidden text-xs text-rose-400 hover:text-rose-300 group-hover:block">✕</button>
-                </button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteServer(svr.id, svr.name) }} className="hidden text-xs text-rose-400 hover:text-rose-300 group-hover:block">✕</button>
+                </div>
                 {selected?.id === svr.id && (
                   <div className="border-t border-slate-800 px-3 py-2 space-y-1">
                     {svr.pools.map((pool) => (
-                      <button key={pool.id} onClick={() => handleSelectPool(pool)} className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${selectedPool?.id === pool.id ? 'bg-amber-500/15 text-amber-300' : 'text-slate-300 hover:bg-slate-800'}`}>
+                      <div key={pool.id} role="button" tabIndex={0} onClick={() => handleSelectPool(pool)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectPool(pool) }} className={`group flex w-full cursor-pointer items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${selectedPool?.id === pool.id ? 'bg-amber-500/15 text-amber-300' : 'text-slate-300 hover:bg-slate-800'}`}>
                         <div>
                           <div className="font-mono text-xs font-semibold">{pool.subnet}</div>
                           <div className="text-[10px] text-slate-400">{pool.leases.filter(l => l.status === 'active').length} active leases</div>
                         </div>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeletePool(pool.id) }} className="hidden text-[10px] text-rose-400 group-hover:block">✕</button>
-                      </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeletePool(pool.id, pool.subnet) }} className="hidden text-[10px] text-rose-400 group-hover:block">✕</button>
+                      </div>
                     ))}
                     <button onClick={() => setShowPoolForm((p) => !p)} className="mt-1 w-full rounded-xl border border-dashed border-slate-700 py-1.5 text-xs text-slate-400 hover:border-amber-500/50 hover:text-amber-400">
                       + Add pool
@@ -282,8 +314,9 @@ export function DhcpPanel() {
                     <div className="text-center"><div className="text-2xl font-bold text-white">{selectedPool.reservations.length}</div><div className="text-[11px] text-amber-400">Reservations</div></div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => { setShowLeaseForm((p) => !p); setShowResForm(false) }} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20">{showLeaseForm ? '✕' : '+ Lease'}</button>
-                    <button onClick={() => { setShowResForm((p) => !p); setShowLeaseForm(false) }} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20">{showResForm ? '✕' : '+ Reservation'}</button>
+                    <button onClick={() => { setShowLeaseForm((p) => !p); setShowResForm(false); setShowBulk(false) }} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20">{showLeaseForm ? '✕' : '+ Lease'}</button>
+                    <button onClick={() => { setShowResForm((p) => !p); setShowLeaseForm(false); setShowBulk(false) }} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20">{showResForm ? '✕' : '+ Reservation'}</button>
+                    <button onClick={() => { setShowBulk((p) => !p); setShowLeaseForm(false); setShowResForm(false) }} className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/20">{showBulk ? '✕' : 'Import leases'}</button>
                   </div>
                 </div>
               </div>
@@ -296,6 +329,16 @@ export function DhcpPanel() {
                   <div><label className={label}>Hostname</label><input value={lHost} onChange={(e) => setLHost(e.target.value)} className={input} /></div>
                   {lErr && <p className="md:col-span-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{lErr}</p>}
                   <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add lease</button></div>
+                </form>
+              )}
+
+              {showBulk && (
+                <form onSubmit={handleBulkImport} className={`${card} space-y-3`}>
+                  <p className="text-sm font-semibold text-white">Bulk import leases</p>
+                  <p className="text-xs text-slate-400">One lease per line: <span className="font-mono text-slate-300">ip,mac,hostname</span></p>
+                  <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} rows={6} placeholder={'192.168.1.20,aa:bb:cc:dd:ee:01,host-20\n192.168.1.21,aa:bb:cc:dd:ee:02,host-21'} className={`${input} font-mono text-xs`} />
+                  {bulkMsg && <p className={`rounded-xl px-3 py-2 text-xs ${bulkMsg.includes('fail') || bulkMsg.includes('No valid') ? 'bg-rose-500/10 text-rose-200' : 'bg-emerald-500/10 text-emerald-200'}`}>{bulkMsg}</p>}
+                  <div className="flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950">Import</button></div>
                 </form>
               )}
 
@@ -330,7 +373,7 @@ export function DhcpPanel() {
                               <button onClick={() => handlePromote(l.id)} disabled={promoting === l.id} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20 disabled:opacity-60">
                                 {promoting === l.id ? '…' : 'Reserve'}
                               </button>
-                              <button onClick={() => handleDeleteLease(l.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button>
+                              <button onClick={() => handleDeleteLease(l.id, l.ip_address)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button>
                             </td>
                           </tr>
                         ))}
@@ -353,7 +396,7 @@ export function DhcpPanel() {
                             <td className="px-3 py-3 font-mono text-slate-300">{res.mac_address}</td>
                             <td className="px-3 py-3 text-slate-200">{res.hostname ?? '—'}</td>
                             <td className="px-3 py-3 text-slate-400">{res.description ?? '—'}</td>
-                            <td className="px-3 py-3 text-right"><button onClick={() => handleDeleteReservation(res.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button></td>
+                            <td className="px-3 py-3 text-right"><button onClick={() => handleDeleteReservation(res.id, res.ip_address)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button></td>
                           </tr>
                         ))}
                     </tbody>

@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 
 import { API_BASE_URL, authHeaders } from './api/client'
+import { confirmDelete } from './confirm'
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -106,7 +107,8 @@ export function DnsOverview() {
     setZoneName(''); setZoneDesc(''); setZoneTtl('300'); setShowZoneForm(false)
   }
 
-  const handleDeleteZone = async (id: number) => {
+  const handleDeleteZone = async (id: number, name: string) => {
+    if (!confirmDelete(`DNS zone "${name}"`)) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${id}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) {
       setZones((p) => p.filter((z) => z.id !== id))
@@ -127,7 +129,8 @@ export function DnsOverview() {
     setRecName(''); setRecValue(''); setRecTtl(''); setRecPriority(''); setRecComment(''); setShowRecordForm(false)
   }
 
-  const handleDeleteRecord = async (recId: number) => {
+  const handleDeleteRecord = async (recId: number, name: string) => {
+    if (!confirmDelete(`DNS record "${name}"`)) return
     if (!selectedZone) return
     const r = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${selectedZone.id}/records/${recId}`, { method: 'DELETE', headers: authHeaders() })
     if (r.ok || r.status === 204) setRecords((p) => p.filter((rec) => rec.id !== recId))
@@ -194,17 +197,17 @@ export function DnsOverview() {
             {zones.length === 0 ? (
               <p className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-center text-sm text-slate-400">No zones yet.</p>
             ) : zones.map((z) => (
-              <button key={z.id} onClick={() => handleSelectZone(z)}
-                className={`group w-full rounded-2xl border p-3 text-left transition ${selectedZone?.id === z.id ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+              <div key={z.id} role="button" tabIndex={0} onClick={() => handleSelectZone(z)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectZone(z) }}
+                className={`group w-full cursor-pointer rounded-2xl border p-3 text-left transition ${selectedZone?.id === z.id ? 'border-cyan-500/40 bg-cyan-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-sm font-semibold text-white">{z.name}</span>
-                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteZone(z.id) }} className="hidden rounded-lg px-1.5 py-0.5 text-[11px] text-rose-400 hover:bg-rose-500/10 group-hover:block">✕</button>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteZone(z.id, z.name) }} className="hidden rounded-lg px-1.5 py-0.5 text-[11px] text-rose-400 hover:bg-rose-500/10 group-hover:block">✕</button>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_BADGE[z.status] ?? 'bg-slate-700 text-slate-300'}`}>{z.status}</span>
                   <span className="text-[11px] text-slate-400">{z.kind} · {z.records.length} records</span>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -287,7 +290,7 @@ export function DnsOverview() {
                         <td className="px-4 py-3 font-mono text-slate-400">{rec.ttl ?? `${selectedZone.default_ttl}*`}</td>
                         <td className="px-4 py-3 text-slate-400">{rec.priority ?? '—'}</td>
                         <td className="px-4 py-3 text-slate-400">{rec.comment ?? '—'}</td>
-                        <td className="px-4 py-3 text-right"><button onClick={() => handleDeleteRecord(rec.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                        <td className="px-4 py-3 text-right"><button onClick={() => handleDeleteRecord(rec.id, rec.name)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
                       </tr>
                     ))}
                   </tbody>

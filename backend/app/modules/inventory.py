@@ -77,6 +77,8 @@ def list_hosts(
     status: str | None = Query(default=None),
     group_id: int | None = Query(default=None),
     tag_id: int | None = Query(default=None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("inventory:read")),
 ) -> list[Host]:
@@ -91,7 +93,7 @@ def list_hosts(
         query = query.filter(Host.groups.any(HostGroup.id == group_id))
     if tag_id:
         query = query.filter(Host.tags.any(HostTag.id == tag_id))
-    return query.order_by(Host.hostname).all()
+    return query.order_by(Host.hostname).offset(offset).limit(limit).all()
 
 
 @router.post("/hosts", response_model=HostRead, status_code=status.HTTP_201_CREATED)
