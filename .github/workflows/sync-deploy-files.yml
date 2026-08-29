@@ -1,12 +1,13 @@
-# Mirror the three deploy files from Development onto main so a server can
-# `git clone -b main` / `git pull` without copying files by hand.
+# Mirror deploy files from Development onto main so a server can
+# `git clone -b main` / `git pull` and run `docker compose` with no -f.
 #
-# Synced files:
-#   docker-compose.server.yml
+# On main these become:
+#   docker-compose.yml   (from docker-compose.server.yml)
+#   .env.example         (from .env.server.example)
 #   README.md
-#   .env.server.example
+#   nexusops
 #
-# Application source, CI image builds, and the rest of the tree stay on Development.
+# Application source and image builds stay on Development.
 
 name: Sync deploy files to main
 
@@ -17,6 +18,7 @@ on:
       - docker-compose.server.yml
       - README.md
       - .env.server.example
+      - nexusops
       - .github/workflows/sync-deploy-files.yml
   workflow_dispatch:
 
@@ -51,22 +53,25 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          files=(
-            docker-compose.server.yml
-            README.md
-            .env.server.example
-          )
-          for f in "${files[@]}"; do
-            if [ ! -f "../source/${f}" ]; then
-              echo "Missing on Development: ${f}"
-              exit 1
-            fi
-            cp "../source/${f}" "./${f}"
-          done
+
+          test -f ../source/docker-compose.server.yml
+          test -f ../source/README.md
+          test -f ../source/.env.server.example
+          test -f ../source/nexusops
+
+          cp ../source/docker-compose.server.yml ./docker-compose.yml
+          cp ../source/.env.server.example ./.env.example
+          cp ../source/README.md ./README.md
+          cp ../source/nexusops ./nexusops
+          chmod +x ./nexusops
+
+          # Drop the old names so `docker compose up` is unambiguous.
+          rm -f ./docker-compose.server.yml ./.env.server.example
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${files[@]}"
+          git add docker-compose.yml .env.example README.md nexusops
+          git rm -f --ignore-unmatch docker-compose.server.yml .env.server.example
 
           if git diff --cached --quiet; then
             echo "main already has the current deploy files."
@@ -75,6 +80,6 @@ jobs:
 
           git commit -m "Sync deploy files from Development (${SOURCE_SHA:0:7})
 
-          Mirrors docker-compose.server.yml, README.md, and .env.server.example.
+          Publishes docker-compose.yml, .env.example, README.md, and nexusops.
           [skip ci]"
           git push origin HEAD:main

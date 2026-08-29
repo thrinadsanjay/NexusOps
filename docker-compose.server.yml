@@ -1,10 +1,7 @@
 # Image-only stack for a new server (no source tree, no image builds).
-#
-#   cp .env.server.example .env
-#   # edit .env — at least PUBLIC_HOST, passwords, and JWT_SECRET_KEY
-#   docker login ghcr.io
-#   docker compose -f docker-compose.server.yml pull
-#   docker compose -f docker-compose.server.yml up -d
+# On main this file is published as docker-compose.yml so you can:
+#   cp .env.example .env && ./nexusops install
+#   docker compose up -d
 #
 # Browser URLs must use the host's DNS name or IP, not Docker service names.
 

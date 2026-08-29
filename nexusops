@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# NexusOps host helper: install Docker if needed, then start/stop the stack.
+# Run from the directory that contains docker-compose.yml (clone of main).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+COMPOSE=(docker compose)
+if [[ -f "$ROOT/docker-compose.yml" ]]; then
+  :
+elif [[ -f "$ROOT/docker-compose.server.yml" ]]; then
+  COMPOSE=(docker compose -f "$ROOT/docker-compose.server.yml")
+else
+  echo "No docker-compose.yml found in $ROOT" >&2
+  exit 1
+fi
+
+ENV_SRC=""
+if [[ -f "$ROOT/.env.example" ]]; then
+  ENV_SRC="$ROOT/.env.example"
+elif [[ -f "$ROOT/.env.server.example" ]]; then
+  ENV_SRC="$ROOT/.env.server.example"
+fi
+
+usage() {
+  cat <<'EOF'
+Usage: ./nexusops <command>
+
+  install     Install Docker + Compose if missing, create .env, pull images, start
+  uninstall   Stop the stack and remove containers (add --purge to delete volumes)
+  start       Start (or recreate) the stack
+  stop        Stop containers (volumes kept)
+  restart     Stop then start
+  status      Show compose service status
+  logs        Follow container logs (optional service name)
+
+Examples:
+  ./nexusops install
+  ./nexusops stop
+  ./nexusops start
+  ./nexusops uninstall --purge
+EOF
+}
+
+need_root_for_packages() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "Installing system packages requires root (sudo)." >&2
+    exit 1
+  fi
+}
+
+have_compose() {
+  docker compose version >/dev/null 2>&1
+}
+
+install_docker() {
+  if command -v docker >/dev/null 2>&1 && have_compose; then
+    echo "Docker and Compose are already installed."
+    return 0
+  fi
+
+  need_root_for_packages
+  echo "Installing Docker Engine and the Compose plugin…"
+
+  if command -v dnf >/dev/null 2>&1; then
+    dnf install -y dnf-plugins-core || true
+    if ! dnf repolist | grep -qi docker-ce; then
+      dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
+    fi
+    if ! dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
+      dnf install -y docker docker-compose || dnf install -y moby-engine docker-compose
+    fi
+    systemctl enable --now docker
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y yum-utils || true
+    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
+    yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin || yum install -y docker docker-compose
+    systemctl enable --now docker
+  elif command -v apt-get >/dev/null 2>&1; then
+    apt-get update -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2 \
+      || DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose
+    systemctl enable --now docker
+  else
+    echo "No dnf/yum/apt found. Install Docker Engine and the Compose plugin, then re-run." >&2
+    exit 1
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! have_compose; then
+    echo "Docker or 'docker compose' is still missing after package install." >&2
+    exit 1
+  fi
+}
+
+ensure_env() {
+  if [[ -f "$ROOT/.env" ]]; then
+    return 0
+  fi
+  if [[ -z "$ENV_SRC" ]]; then
+    echo "No .env or env example found." >&2
+    exit 1
+  fi
+  cp "$ENV_SRC" "$ROOT/.env"
+  echo "Created .env from $(basename "$ENV_SRC"). Edit PUBLIC_HOST, URLs, and secrets before production use."
+}
+
+compose() {
+  "${COMPOSE[@]}" "$@"
+}
+
+cmd_start() {
+  if ! command -v docker >/dev/null 2>&1 || ! have_compose; then
+    echo "Docker Compose is not available. Run: ./nexusops install" >&2
+    exit 1
+  fi
+  ensure_env
+  compose pull
+  compose up -d
+  compose ps
+}
+
+cmd_stop() {
+  compose stop
+}
+
+cmd_uninstall() {
+  local purge=0
+  if [[ "${1:-}" == "--purge" ]]; then
+    purge=1
+  fi
+  if [[ "$purge" -eq 1 ]]; then
+    compose down --volumes --remove-orphans
+    echo "Stack and volumes removed."
+  else
+    compose down --remove-orphans
+    echo "Stack stopped. Volumes kept (use uninstall --purge to delete data)."
+  fi
+}
+
+cmd_install() {
+  install_docker
+  ensure_env
+  echo "Pulling images and starting NexusOps…"
+  compose pull
+  compose up -d
+  compose ps
+  echo
+  echo "NexusOps is up. Edit .env if this is the first run, then: ./nexusops restart"
+  echo "UI:        http://localhost:5173   (or http://<PUBLIC_HOST>:5173)"
+  echo "API docs:  http://localhost:8000/docs"
+}
+
+case "${1:-}" in
+  install) cmd_install ;;
+  uninstall) cmd_uninstall "${2:-}" ;;
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  restart) cmd_stop; cmd_start ;;
+  status) compose ps ;;
+  logs) shift; compose logs -f "$@" ;;
+  -h|--help|help|"") usage ;;
+  *)
+    echo "Unknown command: $1" >&2
+    usage
+    exit 1
+    ;;
+esac
