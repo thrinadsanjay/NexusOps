@@ -37,6 +37,26 @@ docker compose -f docker-compose.server.yml up -d
 
 To pick up compose or env-template changes later: `git pull` then `docker compose -f docker-compose.server.yml pull && docker compose -f docker-compose.server.yml up -d`.
 
+### Postgres `Operation not permitted` on initdb
+
+Recent `postgres:*-alpine` images (Alpine 3.24) call syscalls that older Docker/`libseccomp` on RHEL lab hosts reject. Logs look like:
+
+```
+could not write to file "postmaster.pid": Operation not permitted
+FATAL: could not write to file "pg_wal/xlogtemp.*": Operation not permitted
+initdb: removing contents of data directory
+```
+
+The server compose uses `postgres:16` (Debian) and `seccomp:unconfined` for that service. After `git pull`, remove the failed volume (it is empty) and start again:
+
+```bash
+docker compose -f docker-compose.server.yml down
+docker volume rm nexusops_postgres_data
+docker compose -f docker-compose.server.yml up -d
+```
+
+The lasting host fix is to update Docker Engine and `libseccomp`.
+
 `VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names like `http://backend:8000`. CORS is taken from `FRONTEND_URL`.
 
 Postgres, Redis, and LDAP ports bind to `127.0.0.1` by default. The UI (`FRONTEND_PORT`, default 5173) and API (`BACKEND_PORT`, default 8000) bind on all interfaces. Manage the bundled OpenLDAP directory from the NexusOps **LDAP** page (`/ldap`); there is no separate LDAP admin container.

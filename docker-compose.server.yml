@@ -43,17 +43,24 @@ x-backend-environment: &backend-environment
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Debian, not Alpine: recent postgres:*-alpine tags need a newer libseccomp
+    # than many RHEL/lab Docker hosts provide (initdb then fails with EPERM on
+    # postmaster.pid / pg_wal). seccomp=unconfined is a fallback for old engines.
+    image: ${NEXUSOPS_POSTGRES_IMAGE:-postgres:16}
     container_name: nexusops-postgres
     restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    shm_size: 128mb
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nexusops}
       POSTGRES_USER: ${POSTGRES_USER:-nexusops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexusops} -d ${POSTGRES_DB:-nexusops}"]
       interval: 10s
@@ -68,7 +75,7 @@ services:
     ports:
       - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - redis_data:/data:Z
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -145,8 +152,8 @@ services:
     ports:
       - "${LDAP_BIND:-127.0.0.1}:${LDAP_PORT:-389}:389"
     volumes:
-      - ldap_data:/var/lib/ldap
-      - ldap_config:/etc/ldap/slapd.d
+      - ldap_data:/var/lib/ldap:Z
+      - ldap_config:/etc/ldap/slapd.d:Z
     command: "--loglevel warning"
 
 volumes:

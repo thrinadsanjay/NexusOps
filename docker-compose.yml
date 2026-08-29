@@ -3,12 +3,13 @@
 #   docker compose up --build
 services:
   postgres:
-    image: postgres:16-alpine
+    image: ${NEXUSOPS_POSTGRES_IMAGE:-postgres:16}
     container_name: nexusops-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nexusops}
       POSTGRES_USER: ${POSTGRES_USER:-nexusops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:

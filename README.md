@@ -81,6 +81,17 @@ docker compose -f docker-compose.server.yml up -d
 
 Do **not** clone `Development` onto a production host unless you intend to build from source. Application code and image builds stay on `Development`.
 
+If Postgres exits with `could not write to file "postmaster.pid": Operation not permitted` (common on RHEL/lab Docker hosts with an older `libseccomp`), this compose uses `postgres:16` (Debian) rather than Alpine. After pulling the updated compose, wipe the failed empty volume once and start again:
+
+```bash
+cd /opt/nexusops
+git pull
+docker compose -f docker-compose.server.yml down
+docker volume rm nexusops_postgres_data
+docker compose -f docker-compose.server.yml pull
+docker compose -f docker-compose.server.yml up -d
+```
+
 `VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names. See `DEPLOYMENT.md` on `Development` for GHCR login, package visibility, and LDAP seed.
 
 | Service | URL |
@@ -322,7 +333,7 @@ graph TD
 | `nexusops-backend` | `ghcr.io/thrinadsanjay/nexusops-backend` (or local build) | FastAPI REST API, Alembic migrations, bootstrap | `8000` | PostgreSQL |
 | `nexusops-frontend` | `ghcr.io/thrinadsanjay/nexusops-frontend` (or local build) | React + Vite SPA | `5173` | None |
 | `nexusops-worker` | same backend image | Celery background worker (subnet scans, sync) | — | Redis + PostgreSQL |
-| `nexusops-postgres` | `postgres:16-alpine` | Primary application database | `5432` | `postgres_data` volume |
+| `nexusops-postgres` | `postgres:16` | Primary application database | `5432` | `postgres_data` volume |
 | `nexusops-redis` | `redis:7-alpine` | Celery broker and result backend | `6379` | `redis_data` volume |
 | `nexusops-ldap` | `osixia/openldap:1.5.0` | Bundled OpenLDAP directory server | `389` | `ldap_data`, `ldap_config` volumes |
 
