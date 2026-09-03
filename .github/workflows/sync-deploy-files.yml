@@ -1,9 +1,6 @@
-# Mirror deploy files from Development onto main so a server can
-# `git clone -b main` / `git pull` and run `docker compose` with no -f.
-#
-# On main these become:
-#   docker-compose.yml   (from docker-compose.server.yml)
-#   .env.example         (from .env.server.example)
+# Mirror the single deploy set from Development onto main:
+#   docker-compose.yml
+#   .env.example
 #   README.md
 #   nexusops
 #
@@ -15,9 +12,9 @@ on:
   push:
     branches: [Development]
     paths:
-      - docker-compose.server.yml
+      - docker-compose.yml
       - README.md
-      - .env.server.example
+      - .env.example
       - nexusops
       - .github/workflows/sync-deploy-files.yml
   workflow_dispatch:
@@ -53,24 +50,19 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-
-          test -f ../source/docker-compose.server.yml
-          test -f ../source/README.md
-          test -f ../source/.env.server.example
-          test -f ../source/nexusops
-
-          cp ../source/docker-compose.server.yml ./docker-compose.yml
-          cp ../source/.env.server.example ./.env.example
-          cp ../source/README.md ./README.md
-          cp ../source/nexusops ./nexusops
+          files=(docker-compose.yml .env.example README.md nexusops)
+          for f in "${files[@]}"; do
+            test -f "../source/${f}"
+            cp "../source/${f}" "./${f}"
+          done
           chmod +x ./nexusops
 
-          # Drop the old names so `docker compose up` is unambiguous.
+          # Only docker-compose.yml is the compose file.
           rm -f ./docker-compose.server.yml ./.env.server.example
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docker-compose.yml .env.example README.md nexusops
+          git add "${files[@]}"
           git rm -f --ignore-unmatch docker-compose.server.yml .env.server.example
 
           if git diff --cached --quiet; then

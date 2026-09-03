@@ -1,13 +1,56 @@
-# App images default to GHCR tags published by .github/workflows/docker-publish.yml.
-# Override with NEXUSOPS_BACKEND_IMAGE / NEXUSOPS_FRONTEND_IMAGE, or build locally:
-#   docker compose up --build
+# NexusOps — single compose file for local and server.
+#   cp .env.example .env
+#   ./nexusops install          # server (clone of main)
+#   docker compose up -d        # pull published images
+#   docker compose up -d --build  # build from source (Development only)
+#
+# Browser URLs must use the host DNS name or IP, not Docker service names.
+
+name: nexusops
+
+x-backend-environment: &backend-environment
+  APP_NAME: ${APP_NAME:-nexusops}
+  APP_ENV: ${APP_ENV:-production}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  APP_HOST: 0.0.0.0
+  APP_PORT: "8000"
+  APP_BASE_URL: ${APP_BASE_URL:-http://${PUBLIC_HOST:-localhost}:${BACKEND_PORT:-8000}}
+  FRONTEND_URL: ${FRONTEND_URL:-http://${PUBLIC_HOST:-localhost}:${FRONTEND_PORT:-5173}}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://${POSTGRES_USER:-nexusops}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-nexusops}}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-nexusops}
+  POSTGRES_USER: ${POSTGRES_USER:-nexusops}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+  SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-60}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@nexusops.local}
+  DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-admin}
+  DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-ChangeMe123!}
+  SCAN_NETWORKS: ${SCAN_NETWORKS:-}
+  LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
+  LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
+  LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
+  PYTHONPATH: /app
+
 services:
   postgres:
+    # Debian image: Alpine tags need a newer libseccomp than many lab hosts.
+    # tmpfs + AppArmor/seccomp opts: Proxmox/Debian often cannot write the
+    # Unix socket under /var/run/postgresql (Permission denied after initdb).
     image: ${NEXUSOPS_POSTGRES_IMAGE:-postgres:16}
     container_name: nexusops-postgres
+    restart: unless-stopped
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+    shm_size: 128mb
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nexusops}
       POSTGRES_USER: ${POSTGRES_USER:-nexusops}
@@ -22,9 +65,9 @@ services:
       - -c
       - unix_socket_directories=/var/run/postgresql,/tmp
     ports:
-      - "5432:5432"
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-nexusops} -d ${POSTGRES_DB:-nexusops}"]
       interval: 10s
@@ -34,11 +77,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: nexusops-redis
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - redis_data:/data:Z
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -54,25 +98,15 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: nexusops-backend
-    env_file:
-      - .env
+    restart: unless-stopped
+    pull_policy: ${PULL_POLICY:-missing}
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      SCAN_NETWORKS: ${SCAN_NETWORKS:-}
-      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
-      LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
-      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
-      PYTHONPATH: /app
-      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
-      PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
+      <<: *backend-environment
     ports:
-      - "8000:8000"
+      - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8000}:8000"
     cap_add:
       - NET_RAW
       - NET_ADMIN
-    volumes:
-      - ./.env:/app/.env:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,18 +128,16 @@ services:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: nexusops-worker
-    env_file:
-      - .env
+    restart: unless-stopped
+    pull_policy: ${PULL_POLICY:-missing}
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      PYTHONPATH: /app
-      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
-      PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
+      <<: *backend-environment
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      backend:
         condition: service_healthy
     command: celery -A app.worker worker --loglevel=info
 
@@ -115,31 +147,35 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: nexusops-frontend
+    restart: unless-stopped
+    pull_policy: ${PULL_POLICY:-missing}
     ports:
-      - "5173:5173"
-    depends_on:
-      - backend
+      - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-5173}:5173"
     environment:
-      VITE_API_BASE_URL: http://localhost:8000
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://${PUBLIC_HOST:-localhost}:${BACKEND_PORT:-8000}}
+    depends_on:
+      backend:
+        condition: service_healthy
 
   openldap:
     image: osixia/openldap:1.5.0
     container_name: nexusops-ldap
+    restart: unless-stopped
     environment:
-      LDAP_ORGANISATION: "NexusOps Homelab"
-      LDAP_DOMAIN: homelab.local
-      LDAP_BASE_DN: dc=homelab,dc=local
+      LDAP_ORGANISATION: ${LDAP_ORGANISATION:-NexusOps Homelab}
+      LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
       LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
       LDAP_CONFIG_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
-      LDAP_READONLY_USER: "true"
-      LDAP_READONLY_USER_USERNAME: readonly
-      LDAP_READONLY_USER_PASSWORD: readonly
+      LDAP_READONLY_USER: ${LDAP_READONLY_USER:-true}
+      LDAP_READONLY_USER_USERNAME: ${LDAP_READONLY_USER_USERNAME:-readonly}
+      LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_USER_PASSWORD:-readonly}
       LDAP_TLS: "false"
     ports:
-      - "389:389"
+      - "${LDAP_BIND:-127.0.0.1}:${LDAP_PORT:-389}:389"
     volumes:
-      - ldap_data:/var/lib/ldap
-      - ldap_config:/etc/ldap/slapd.d
+      - ldap_data:/var/lib/ldap:Z
+      - ldap_config:/etc/ldap/slapd.d:Z
     command: "--loglevel warning"
 
 volumes:

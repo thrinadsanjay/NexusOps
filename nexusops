@@ -1,39 +1,30 @@
 #!/usr/bin/env bash
-# NexusOps host helper: install Docker if needed, then start/stop the stack.
-# Run from the directory that contains docker-compose.yml (clone of main).
+# NexusOps host helper. Uses docker-compose.yml only.
+#   ./nexusops install   # OS-aware Docker + host libs, then pull/start
+#   ./nexusops start|stop|restart|uninstall|status|logs
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-COMPOSE=(docker compose)
-if [[ -f "$ROOT/docker-compose.yml" ]]; then
-  :
-elif [[ -f "$ROOT/docker-compose.server.yml" ]]; then
-  COMPOSE=(docker compose -f "$ROOT/docker-compose.server.yml")
-else
-  echo "No docker-compose.yml found in $ROOT" >&2
+if [[ ! -f "$ROOT/docker-compose.yml" ]]; then
+  echo "docker-compose.yml not found in $ROOT" >&2
   exit 1
 fi
 
-ENV_SRC=""
-if [[ -f "$ROOT/.env.example" ]]; then
-  ENV_SRC="$ROOT/.env.example"
-elif [[ -f "$ROOT/.env.server.example" ]]; then
-  ENV_SRC="$ROOT/.env.server.example"
-fi
+COMPOSE=(docker compose -f "$ROOT/docker-compose.yml")
 
 usage() {
   cat <<'EOF'
 Usage: ./nexusops <command>
 
-  install     Install Docker + Compose if missing, create .env, pull images, start
-  uninstall   Stop the stack and remove containers (add --purge to delete volumes)
-  start       Start (or recreate) the stack
+  install     Detect OS, install/update Docker + Compose + host libs, start stack
+  uninstall   Stop the stack (add --purge to delete volumes)
+  start       Pull images and docker compose up -d
   stop        Stop containers (volumes kept)
   restart     Stop then start
   status      Show compose service status
-  logs        Follow container logs (optional service name)
+  logs        Follow logs (optional service name)
 
 Examples:
   ./nexusops install
@@ -43,66 +34,153 @@ Examples:
 EOF
 }
 
-need_root_for_packages() {
+need_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
-    echo "Installing system packages requires root (sudo)." >&2
+    echo "This step requires root (sudo)." >&2
     exit 1
   fi
 }
 
 have_compose() {
-  docker compose version >/dev/null 2>&1
+  command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1
 }
 
-install_docker() {
-  if command -v docker >/dev/null 2>&1 && have_compose; then
-    echo "Docker and Compose are already installed."
-    return 0
+load_os() {
+  OS_ID=""
+  OS_LIKE=""
+  OS_VERSION_ID=""
+  OS_CODENAME=""
+  OS_FAMILY=""
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    OS_ID="${ID:-}"
+    OS_LIKE="${ID_LIKE:-}"
+    OS_VERSION_ID="${VERSION_ID:-}"
+    OS_CODENAME="${VERSION_CODENAME:-${UBUNTU_CODENAME:-}}"
+    UBUNTU_CODENAME="${UBUNTU_CODENAME:-}"
   fi
-
-  need_root_for_packages
-  echo "Installing Docker Engine and the Compose plugin…"
-
-  if command -v dnf >/dev/null 2>&1; then
-    dnf install -y dnf-plugins-core || true
-    if ! dnf repolist | grep -qi docker-ce; then
-      dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
-    fi
-    if ! dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
-      dnf install -y docker docker-compose || dnf install -y moby-engine docker-compose
-    fi
-    systemctl enable --now docker
-  elif command -v yum >/dev/null 2>&1; then
-    yum install -y yum-utils || true
-    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
-    yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin || yum install -y docker docker-compose
-    systemctl enable --now docker
-  elif command -v apt-get >/dev/null 2>&1; then
-    apt-get update -y
-    DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2 \
-      || DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose
-    systemctl enable --now docker
+  if [[ -e /etc/pve/.version ]] || [[ "${OS_ID}" == "pve" ]] || echo "${PRETTY_NAME:-} ${OS_LIKE}" | grep -qi proxmox; then
+    OS_FAMILY="debian"
+    OS_ID="${OS_ID:-debian}"
+  elif [[ "${OS_ID}" =~ ^(debian|ubuntu)$ ]] || echo "${OS_LIKE}" | grep -Eq 'debian|ubuntu'; then
+    OS_FAMILY="debian"
+  elif [[ "${OS_ID}" =~ ^(rhel|centos|rocky|almalinux|fedora|ol)$ ]] || echo "${OS_LIKE}" | grep -Eq 'rhel|fedora|centos'; then
+    OS_FAMILY="rhel"
   else
-    echo "No dnf/yum/apt found. Install Docker Engine and the Compose plugin, then re-run." >&2
-    exit 1
+    OS_FAMILY="unknown"
+  fi
+  echo "Detected OS: id=${OS_ID:-unknown} version=${OS_VERSION_ID:-?} family=${OS_FAMILY}"
+}
+
+apt_install() {
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+}
+
+install_docker_debian() {
+  need_root
+  apt-get update -y
+  apt_install ca-certificates curl gnupg lsb-release libseccomp2
+  # Prefer Docker CE over Debian's docker.io (older seccomp/AppArmor profiles).
+  apt-get remove -y docker.io docker-doc docker-compose docker-compose-v2 containerd runc 2>/dev/null || true
+
+  local arch codename repo
+  arch="$(dpkg --print-architecture)"
+  if [[ "${OS_ID}" == "ubuntu" ]]; then
+    repo="ubuntu"
+    codename="${UBUNTU_CODENAME:-${OS_CODENAME}}"
+  else
+    repo="debian"
+    codename="${OS_CODENAME}"
+    # Proxmox reports Debian; map missing codename from VERSION_ID.
+    if [[ -z "${codename}" ]]; then
+      case "${OS_VERSION_ID%%.*}" in
+        12) codename="bookworm" ;;
+        13) codename="trixie" ;;
+        11) codename="bullseye" ;;
+        *) codename="bookworm" ;;
+      esac
+    fi
   fi
 
-  if ! command -v docker >/dev/null 2>&1 || ! have_compose; then
-    echo "Docker or 'docker compose' is still missing after package install." >&2
+  install -m 0755 -d /etc/apt/keyrings
+  if [[ ! -f /etc/apt/keyrings/docker.asc ]]; then
+    curl -fsSL "https://download.docker.com/linux/${repo}/gpg" -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+  fi
+  echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${repo} ${codename} stable" \
+    > /etc/apt/sources.list.d/docker.list
+  apt-get update -y
+  apt_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  systemctl enable --now docker
+
+  if command -v aa-status >/dev/null 2>&1 || [[ -d /sys/kernel/security/apparmor ]]; then
+    apt_install apparmor apparmor-utils || true
+    # Docker CE ships a profile; keep AppArmor on and rely on compose apparmor:unconfined for Postgres.
+    systemctl enable --now apparmor 2>/dev/null || true
+  fi
+}
+
+install_docker_rhel() {
+  need_root
+  local pkg=dnf
+  command -v dnf >/dev/null 2>&1 || pkg=yum
+
+  $pkg install -y ca-certificates curl libseccomp || $pkg install -y libseccomp2 || true
+  if $pkg install -y dnf-plugins-core 2>/dev/null || $pkg install -y yum-utils 2>/dev/null; then
+    :
+  fi
+
+  local release
+  release="$(rpm -E %rhel 2>/dev/null || echo "${OS_VERSION_ID%%.*}")"
+  if [[ ! -f /etc/yum.repos.d/docker-ce.repo ]]; then
+    if [[ "${OS_ID}" == "fedora" ]]; then
+      $pkg config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo || true
+    else
+      $pkg config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo \
+        || curl -fsSL "https://download.docker.com/linux/centos/docker-ce.repo" -o /etc/yum.repos.d/docker-ce.repo
+    fi
+  fi
+  echo "RHEL-compatible release=${release}"
+  $pkg install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+    || $pkg install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  systemctl enable --now docker
+}
+
+prepare_host() {
+  load_os
+  echo "Installing or updating Docker Engine, Compose, and host security libraries…"
+  case "${OS_FAMILY}" in
+    debian) install_docker_debian ;;
+    rhel) install_docker_rhel ;;
+    *)
+      if have_compose; then
+        echo "Unknown OS; Docker already present. Skipping package install."
+      else
+        echo "Unsupported OS (${OS_ID}). Install Docker Engine + Compose plugin, then re-run." >&2
+        exit 1
+      fi
+      ;;
+  esac
+
+  if ! have_compose; then
+    echo "docker compose is still missing after install." >&2
     exit 1
   fi
+  docker version >/dev/null
+  docker compose version
 }
 
 ensure_env() {
   if [[ -f "$ROOT/.env" ]]; then
     return 0
   fi
-  if [[ -z "$ENV_SRC" ]]; then
-    echo "No .env or env example found." >&2
+  if [[ ! -f "$ROOT/.env.example" ]]; then
+    echo "No .env.example found." >&2
     exit 1
   fi
-  cp "$ENV_SRC" "$ROOT/.env"
-  echo "Created .env from $(basename "$ENV_SRC"). Edit PUBLIC_HOST, URLs, and secrets before production use."
+  cp "$ROOT/.env.example" "$ROOT/.env"
+  echo "Created .env from .env.example. Edit PUBLIC_HOST, URLs, and secrets before production use."
 }
 
 compose() {
@@ -110,7 +188,7 @@ compose() {
 }
 
 cmd_start() {
-  if ! command -v docker >/dev/null 2>&1 || ! have_compose; then
+  if ! have_compose; then
     echo "Docker Compose is not available. Run: ./nexusops install" >&2
     exit 1
   fi
@@ -125,11 +203,7 @@ cmd_stop() {
 }
 
 cmd_uninstall() {
-  local purge=0
   if [[ "${1:-}" == "--purge" ]]; then
-    purge=1
-  fi
-  if [[ "$purge" -eq 1 ]]; then
     compose down --volumes --remove-orphans
     echo "Stack and volumes removed."
   else
@@ -139,7 +213,7 @@ cmd_uninstall() {
 }
 
 cmd_install() {
-  install_docker
+  prepare_host
   ensure_env
   echo "Pulling images and starting NexusOps…"
   compose pull

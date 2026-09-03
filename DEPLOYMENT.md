@@ -35,7 +35,7 @@ Later: `git pull && ./nexusops start` (or `docker compose pull && docker compose
 
 | Command | What it does |
 |---|---|
-| `./nexusops install` | Install Docker/Compose if missing, create `.env`, pull, start |
+| `./nexusops install` | Detect OS, install Docker CE + Compose + libseccomp, create `.env`, pull, start |
 | `./nexusops start` | Pull images and `up -d` |
 | `./nexusops stop` | Stop containers |
 | `./nexusops uninstall` | Remove containers (`--purge` also deletes volumes) |

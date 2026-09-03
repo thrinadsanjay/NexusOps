@@ -20,7 +20,7 @@ Current Phase  : Phase 10 (LDAP Integration)
 ### Recent additions
 
 - **CI/CD** — GitHub Actions tests the API and UI, then builds and pushes `nexusops-backend` and `nexusops-frontend` to GHCR (`latest` on `Development`, plus branch/`sha-*` tags; semver on `v*` tags). Optional Docker Hub when repository secrets are set.
-- **New-server deploy** — Image-only compose is mirrored to `main` as `docker-compose.yml` (plus `.env.example`, this README, and `./nexusops`) so a server can `git clone -b main` and run `docker compose up -d` with no `-f`.
+- **New-server deploy** — One compose file (`docker-compose.yml`) plus `.env.example` and `./nexusops` are mirrored to `main`. `./nexusops install` installs Docker Engine for Debian/Proxmox or RHEL and starts the stack.
 - **LDAP in the product UI** — directory browse, bind test, user sync, and server registry live under **LDAP**. The old phpLDAPadmin sidecar (`nexusops-ldapadmin` on port 8082) is removed. Bundled **OpenLDAP** remains.
 - **Public PyPI builds** — the backend image installs Python packages from `https://pypi.org/simple` unless you override `PIP_INDEX_URL`.
 - **Frontend image** — built on `node:20-bookworm-slim` so Rollup’s glibc binary is present (`@rollup/rollup-linux-x64-gnu`). Alpine images often miss `@rollup/rollup-linux-x64-musl` because of an npm optional-deps bug.
@@ -51,14 +51,12 @@ docker compose up -d
 
 ### New server (clone `main`)
 
-`main` is a deploy mirror. A workflow publishes these files from `Development`:
+`main` is a deploy mirror of the same files used on `Development`:
 
-| On Development | On `main` |
-|---|---|
-| `docker-compose.server.yml` | `docker-compose.yml` |
-| `.env.server.example` | `.env.example` |
-| `README.md` | `README.md` |
-| `nexusops` | `nexusops` |
+- `docker-compose.yml`
+- `.env.example`
+- `README.md`
+- `nexusops`
 
 On the server:
 
@@ -88,7 +86,7 @@ git pull
 
 | Command | What it does |
 |---|---|
-| `./nexusops install` | Install Docker/Compose if missing, create `.env`, pull images, start |
+| `./nexusops install` | Detect OS, install Docker CE + Compose + libseccomp, create `.env`, pull, start |
 | `./nexusops start` | `docker compose pull && up -d` |
 | `./nexusops stop` | Stop containers (data volumes kept) |
 | `./nexusops uninstall` | Remove containers (`--purge` also deletes volumes) |
@@ -401,11 +399,9 @@ NexusOps/
 │       └── Tools.tsx             # Integrations portal
 ├── ldap-bootstrap/
 │   └── init.ldif                 # Initial LDAP directory seed (OUs, users, groups)
-├── docker-compose.yml            # Local / source builds
-├── docker-compose.server.yml     # Image-only stack (published on main as docker-compose.yml)
+├── docker-compose.yml            # Only compose file (images + optional source build)
 ├── nexusops                      # Host helper: install / start / stop / uninstall
 ├── .env.example
-├── .env.server.example
 └── .env
 ```
 
@@ -450,7 +446,7 @@ Key `.env` variables:
 | `NEXUSOPS_FRONTEND_IMAGE` | `ghcr.io/thrinadsanjay/nexusops-frontend:latest` | Frontend image to pull |
 | `PIP_INDEX_URL` | `https://pypi.org/simple` | Pip index used when building the backend image |
 
-Server bind/port overrides (`BACKEND_PORT`, `FRONTEND_PORT`, `POSTGRES_BIND`, and so on) are listed in `.env.server.example`.
+Server bind/port overrides (`BACKEND_PORT`, `FRONTEND_PORT`, `POSTGRES_BIND`, and so on) are listed in `.env.example`.
 
 ---
 
@@ -470,7 +466,7 @@ GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflo
 - Git tags matching `v*` (for example `v1.2.0`): semver tags (`1.2.0`, `1.2`)
 - **Actions → Run workflow**: same as a push of that ref
 
-`main` does not build images. Workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml) publishes `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` on `main` from the Development server compose and env template.
+`main` does not build images. Workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml) copies `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` from `Development` to `main`.
 
 **Optional Docker Hub**
 
