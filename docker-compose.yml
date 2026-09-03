@@ -1,12 +1,10 @@
-# Image-only stack for a new server (no source tree, no image builds).
+# NexusOps — single compose file for local and server.
+#   cp .env.example .env
+#   ./nexusops install          # server (clone of main)
+#   docker compose up -d        # pull published images
+#   docker compose up -d --build  # build from source (Development only)
 #
-#   cp .env.server.example .env
-#   # edit .env — at least PUBLIC_HOST, passwords, and JWT_SECRET_KEY
-#   docker login ghcr.io
-#   docker compose -f docker-compose.server.yml pull
-#   docker compose -f docker-compose.server.yml up -d
-#
-# Browser URLs must use the host's DNS name or IP, not Docker service names.
+# Browser URLs must use the host DNS name or IP, not Docker service names.
 
 name: nexusops
 
@@ -43,19 +41,35 @@ x-backend-environment: &backend-environment
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Debian image: Alpine tags need a newer libseccomp than many lab hosts.
+    # tmpfs + AppArmor/seccomp opts: Proxmox/Debian often cannot write the
+    # Unix socket under /var/run/postgresql (Permission denied after initdb).
+    image: ${NEXUSOPS_POSTGRES_IMAGE:-postgres:16}
     container_name: nexusops-postgres
     restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    shm_size: 128mb
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nexusops}
       POSTGRES_USER: ${POSTGRES_USER:-nexusops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    tmpfs:
+      - /var/run/postgresql:uid=999,gid=999,mode=01777
+    command:
+      - postgres
+      - -c
+      - listen_addresses=*
+      - -c
+      - unix_socket_directories=/var/run/postgresql,/tmp
     ports:
       - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:Z
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexusops} -d ${POSTGRES_DB:-nexusops}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-nexusops} -d ${POSTGRES_DB:-nexusops}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -68,7 +82,7 @@ services:
     ports:
       - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
-      - redis_data:/data
+      - redis_data:/data:Z
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -77,6 +91,12 @@ services:
 
   backend:
     image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: nexusops-backend
     restart: unless-stopped
     pull_policy: ${PULL_POLICY:-missing}
@@ -101,6 +121,12 @@ services:
 
   worker:
     image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: nexusops-worker
     restart: unless-stopped
     pull_policy: ${PULL_POLICY:-missing}
@@ -117,6 +143,9 @@ services:
 
   frontend:
     image: ${NEXUSOPS_FRONTEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-frontend:latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: nexusops-frontend
     restart: unless-stopped
     pull_policy: ${PULL_POLICY:-missing}
@@ -145,8 +174,8 @@ services:
     ports:
       - "${LDAP_BIND:-127.0.0.1}:${LDAP_PORT:-389}:389"
     volumes:
-      - ldap_data:/var/lib/ldap
-      - ldap_config:/etc/ldap/slapd.d
+      - ldap_data:/var/lib/ldap:Z
+      - ldap_config:/etc/ldap/slapd.d:Z
     command: "--loglevel warning"
 
 volumes:
