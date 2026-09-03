@@ -20,6 +20,14 @@ env:
   PLATFORMS: linux/amd64
 
 jobs:
+  # Starts immediately on Development pushes. Does not wait for tests or images.
+  sync-main:
+    name: Sync deploy files to main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/Development'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/sync-deploy-files.yml
+
   test:
     name: Test
     runs-on: ubuntu-latest

@@ -116,7 +116,7 @@ Workflow: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publ
 | Tag `v*` | yes | yes | GHCR (semver tags) |
 | Manual **Run workflow** | yes | yes | GHCR (unless run on a PR ref) |
 
-Pushing those deploy files to `Development` also runs [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml), which publishes `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` on `main`. Image builds do not run on `main`.
+Every push to `Development` immediately syncs `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` to `main` ([`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml)). That job is also started from the image pipeline and does **not** wait for tests or image builds.
 
 If the sync job cannot push, allow GitHub Actions write access to `main` (**Settings → Actions → General → Workflow permissions**, and any branch-protection rules on `main`).
 
