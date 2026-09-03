@@ -20,9 +20,10 @@ Current Phase  : Phase 10 (LDAP Integration)
 ### Recent additions
 
 - **CI/CD** — GitHub Actions tests the API and UI, then builds and pushes `nexusops-backend` and `nexusops-frontend` to GHCR (`latest` on `Development`, plus branch/`sha-*` tags; semver on `v*` tags). Optional Docker Hub when repository secrets are set.
-- **New-server deploy** — `docker-compose.server.yml` plus `.env.server.example` start the stack from published images. Those two files and this README are mirrored to `main` so a server can `git clone -b main` / `git pull` for updates.
+- **New-server deploy** — One compose file (`docker-compose.yml`) plus `.env.example` and `./nexusops` are mirrored to `main`. `./nexusops install` installs Docker Engine for Debian/Proxmox or RHEL and starts the stack.
 - **LDAP in the product UI** — directory browse, bind test, user sync, and server registry live under **LDAP**. The old phpLDAPadmin sidecar (`nexusops-ldapadmin` on port 8082) is removed. Bundled **OpenLDAP** remains.
 - **Public PyPI builds** — the backend image installs Python packages from `https://pypi.org/simple` unless you override `PIP_INDEX_URL`.
+- **Frontend image** — built on `node:20-bookworm-slim` so Rollup’s glibc binary is present (`@rollup/rollup-linux-x64-gnu`). Alpine images often miss `@rollup/rollup-linux-x64-musl` because of an npm optional-deps bug.
 
 ---
 
@@ -50,36 +51,61 @@ docker compose up -d
 
 ### New server (clone `main`)
 
-`main` is a deploy mirror. A workflow copies only these files from `Development` whenever they change:
+`main` is a deploy mirror of the same files used on `Development`:
 
-- `docker-compose.server.yml`
-- `.env.server.example`
+- `docker-compose.yml`
+- `.env.example`
 - `README.md`
+- `nexusops`
 
 On the server:
 
 ```bash
 git clone --branch main --single-branch https://github.com/thrinadsanjay/NexusOps.git /opt/nexusops
 cd /opt/nexusops
-cp .env.server.example .env
-# Set PUBLIC_HOST to this server's DNS name or IP, then matching:
-#   APP_BASE_URL, FRONTEND_URL, VITE_API_BASE_URL
-# Rotate POSTGRES_PASSWORD (keep DATABASE_URL in sync), JWT_SECRET_KEY, DEFAULT_ADMIN_PASSWORD
-docker login ghcr.io
-docker compose -f docker-compose.server.yml pull
-docker compose -f docker-compose.server.yml up -d
+./nexusops install
+# first run: edit .env (PUBLIC_HOST, URLs, secrets) then ./nexusops restart
 ```
 
-Later updates (compose, env template, or this README):
+Or without the helper:
+
+```bash
+cp .env.example .env
+docker compose pull
+docker compose up -d
+```
+
+Later updates:
 
 ```bash
 cd /opt/nexusops
 git pull
-docker compose -f docker-compose.server.yml pull
-docker compose -f docker-compose.server.yml up -d
+./nexusops start          # pull + up -d
+# or: docker compose pull && docker compose up -d
 ```
 
+| Command | What it does |
+|---|---|
+| `./nexusops install` | Detect OS, install Docker CE + Compose + libseccomp, create `.env`, pull, start |
+| `./nexusops start` | `docker compose pull && up -d` |
+| `./nexusops stop` | Stop containers (data volumes kept) |
+| `./nexusops uninstall` | Remove containers (`--purge` also deletes volumes) |
+
 Do **not** clone `Development` onto a production host unless you intend to build from source. Application code and image builds stay on `Development`.
+
+**Postgres on Proxmox/Debian** (`could not create Unix-domain socket in directory "/var/run/postgresql"`): initdb worked; the server cannot write its socket. Compose mounts a writable tmpfs on that path and health-checks over TCP. Recreate the container (keep the volume):
+
+```bash
+docker compose up -d --force-recreate postgres
+```
+
+**Postgres `postmaster.pid`: Operation not permitted** (older Docker/`libseccomp` + Alpine): compose uses `postgres:16` (Debian). Only if initdb never finished, wipe the empty volume once:
+
+```bash
+docker compose down
+docker volume rm nexusops_postgres_data
+./nexusops start
+```
 
 `VITE_API_BASE_URL` and `FRONTEND_URL` must be URLs the **browser** uses (host IP or DNS), not Docker service names. See `DEPLOYMENT.md` on `Development` for GHCR login, package visibility, and LDAP seed.
 
@@ -322,7 +348,7 @@ graph TD
 | `nexusops-backend` | `ghcr.io/thrinadsanjay/nexusops-backend` (or local build) | FastAPI REST API, Alembic migrations, bootstrap | `8000` | PostgreSQL |
 | `nexusops-frontend` | `ghcr.io/thrinadsanjay/nexusops-frontend` (or local build) | React + Vite SPA | `5173` | None |
 | `nexusops-worker` | same backend image | Celery background worker (subnet scans, sync) | — | Redis + PostgreSQL |
-| `nexusops-postgres` | `postgres:16-alpine` | Primary application database | `5432` | `postgres_data` volume |
+| `nexusops-postgres` | `postgres:16` | Primary application database | `5432` | `postgres_data` volume |
 | `nexusops-redis` | `redis:7-alpine` | Celery broker and result backend | `6379` | `redis_data` volume |
 | `nexusops-ldap` | `osixia/openldap:1.5.0` | Bundled OpenLDAP directory server | `389` | `ldap_data`, `ldap_config` volumes |
 
@@ -373,10 +399,9 @@ NexusOps/
 │       └── Tools.tsx             # Integrations portal
 ├── ldap-bootstrap/
 │   └── init.ldif                 # Initial LDAP directory seed (OUs, users, groups)
-├── docker-compose.yml            # Local / source builds
-├── docker-compose.server.yml     # New-server deploy from GHCR images
+├── docker-compose.yml            # Only compose file (images + optional source build)
+├── nexusops                      # Host helper: install / start / stop / uninstall
 ├── .env.example
-├── .env.server.example
 └── .env
 ```
 
@@ -421,7 +446,7 @@ Key `.env` variables:
 | `NEXUSOPS_FRONTEND_IMAGE` | `ghcr.io/thrinadsanjay/nexusops-frontend:latest` | Frontend image to pull |
 | `PIP_INDEX_URL` | `https://pypi.org/simple` | Pip index used when building the backend image |
 
-Server bind/port overrides (`BACKEND_PORT`, `FRONTEND_PORT`, `POSTGRES_BIND`, and so on) are listed in `.env.server.example`.
+Server bind/port overrides (`BACKEND_PORT`, `FRONTEND_PORT`, `POSTGRES_BIND`, and so on) are listed in `.env.example`.
 
 ---
 
@@ -441,7 +466,7 @@ GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflo
 - Git tags matching `v*` (for example `v1.2.0`): semver tags (`1.2.0`, `1.2`)
 - **Actions → Run workflow**: same as a push of that ref
 
-`main` does not build images. Workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml) copies `docker-compose.server.yml`, `README.md`, and `.env.server.example` from `Development` onto `main` so deploy hosts can `git pull`.
+`main` does not build images. Workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml) copies `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` from `Development` to `main`.
 
 **Optional Docker Hub**
 
