@@ -73,35 +73,46 @@ load_os() {
   echo "Detected OS: id=${OS_ID:-unknown} version=${OS_VERSION_ID:-?} family=${OS_FAMILY}"
 }
 
-apt_install() {
-  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@"
+apt_try() {
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" || true
+}
+
+debian_codename() {
+  local codename="${OS_CODENAME:-}"
+  if [[ -n "${codename}" ]]; then
+    echo "${codename}"
+    return 0
+  fi
+  case "${OS_VERSION_ID%%.*}" in
+    11) echo bullseye ;;
+    12) echo bookworm ;;
+    13) echo trixie ;;
+    *) echo trixie ;;
+  esac
 }
 
 install_docker_debian() {
   need_root
   apt-get update -y
-  apt_install ca-certificates curl gnupg lsb-release libseccomp2
-  # Prefer Docker CE over Debian's docker.io (older seccomp/AppArmor profiles).
-  apt-get remove -y docker.io docker-doc docker-compose docker-compose-v2 containerd runc 2>/dev/null || true
+  # Debian 13 / Proxmox do not ship lsb-release. os-release is enough.
+  apt_try ca-certificates curl gnupg libseccomp2
 
-  local arch codename repo
+  if have_compose; then
+    echo "Docker Compose is already installed; leaving the engine in place."
+    systemctl enable --now docker 2>/dev/null || true
+    return 0
+  fi
+
+  local arch repo codename
   arch="$(dpkg --print-architecture)"
   if [[ "${OS_ID}" == "ubuntu" ]]; then
     repo="ubuntu"
-    codename="${UBUNTU_CODENAME:-${OS_CODENAME}}"
+    codename="${UBUNTU_CODENAME:-${OS_CODENAME:-$(debian_codename)}}"
   else
     repo="debian"
-    codename="${OS_CODENAME}"
-    # Proxmox reports Debian; map missing codename from VERSION_ID.
-    if [[ -z "${codename}" ]]; then
-      case "${OS_VERSION_ID%%.*}" in
-        12) codename="bookworm" ;;
-        13) codename="trixie" ;;
-        11) codename="bullseye" ;;
-        *) codename="bookworm" ;;
-      esac
-    fi
+    codename="$(debian_codename)"
   fi
+  echo "Installing Docker CE for ${repo}/${codename} (${arch})"
 
   install -m 0755 -d /etc/apt/keyrings
   if [[ ! -f /etc/apt/keyrings/docker.asc ]]; then
@@ -111,14 +122,13 @@ install_docker_debian() {
   echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${repo} ${codename} stable" \
     > /etc/apt/sources.list.d/docker.list
   apt-get update -y
-  apt_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  systemctl enable --now docker
-
-  if command -v aa-status >/dev/null 2>&1 || [[ -d /sys/kernel/security/apparmor ]]; then
-    apt_install apparmor apparmor-utils || true
-    # Docker CE ships a profile; keep AppArmor on and rely on compose apparmor:unconfined for Postgres.
-    systemctl enable --now apparmor 2>/dev/null || true
+  if ! DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
+    echo "Docker CE repo install failed; trying distro docker.io + compose plugin."
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends docker.io docker-compose-v2 \
+      || DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose
   fi
+  systemctl enable --now docker
 }
 
 install_docker_rhel() {
@@ -149,10 +159,18 @@ install_docker_rhel() {
 
 prepare_host() {
   load_os
-  echo "Installing or updating Docker Engine, Compose, and host security libraries…"
+  echo "Preparing host packages for ${OS_FAMILY}…"
   case "${OS_FAMILY}" in
     debian) install_docker_debian ;;
-    rhel) install_docker_rhel ;;
+    rhel)
+      if have_compose; then
+        echo "Docker Compose is already installed; refreshing libseccomp only."
+        need_root
+        command -v dnf >/dev/null 2>&1 && dnf install -y libseccomp || yum install -y libseccomp || true
+      else
+        install_docker_rhel
+      fi
+      ;;
     *)
       if have_compose; then
         echo "Unknown OS; Docker already present. Skipping package install."
