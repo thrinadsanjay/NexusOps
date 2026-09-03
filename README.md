@@ -95,11 +95,15 @@ git pull
 
 Do **not** clone `Development` onto a production host unless you intend to build from source. Application code and image builds stay on `Development`.
 
-If Postgres exits with `could not write to file "postmaster.pid": Operation not permitted` (common on RHEL/lab Docker hosts with an older `libseccomp`), this compose uses `postgres:16` (Debian) rather than Alpine. After pulling the updated compose, wipe the failed empty volume once and start again:
+**Postgres on Proxmox/Debian** (`could not create Unix-domain socket in directory "/var/run/postgresql"`): initdb worked; the server cannot write its socket. Compose mounts a writable tmpfs on that path and health-checks over TCP. Recreate the container (keep the volume):
 
 ```bash
-cd /opt/nexusops
-git pull
+docker compose up -d --force-recreate postgres
+```
+
+**Postgres `postmaster.pid`: Operation not permitted** (older Docker/`libseccomp` + Alpine): compose uses `postgres:16` (Debian). Only if initdb never finished, wipe the empty volume once:
+
+```bash
 docker compose down
 docker volume rm nexusops_postgres_data
 ./nexusops start

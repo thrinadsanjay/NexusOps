@@ -40,6 +40,21 @@ Later: `git pull && ./nexusops start` (or `docker compose pull && docker compose
 | `./nexusops stop` | Stop containers |
 | `./nexusops uninstall` | Remove containers (`--purge` also deletes volumes) |
 
+### Postgres Unix socket `Permission denied` (Proxmox / Debian)
+
+If logs show initdb **Success** then:
+
+```
+could not create Unix socket for address "/var/run/postgresql/.s.PGSQL.5432": Permission denied
+FATAL: could not create any Unix-domain sockets
+```
+
+the data volume is fine. The `postgres` user cannot write `/var/run/postgresql` (common on Proxmox VE, LXC, and AppArmor). Compose mounts a tmpfs there. Recreate Postgres only:
+
+```bash
+docker compose up -d --force-recreate postgres
+```
+
 ### Postgres `Operation not permitted` on initdb
 
 Recent `postgres:*-alpine` images (Alpine 3.24) call syscalls that older Docker/`libseccomp` on RHEL lab hosts reject. Logs look like:
