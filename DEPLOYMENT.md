@@ -112,7 +112,7 @@ Workflow: [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publ
 | Event | Tests | Build | Push |
 |---|---|---|---|
 | Pull request to `Development` | yes | yes | no |
-| Push to `Development` | yes | yes | GHCR (`latest` + branch + `sha-*`) |
+| Push to `Development` | yes | yes | GHCR (`latest` + branch + `sha-*`); deploy files synced to `main` immediately |
 | Tag `v*` | yes | yes | GHCR (semver tags) |
 | Manual **Run workflow** | yes | yes | GHCR (unless run on a PR ref) |
 
