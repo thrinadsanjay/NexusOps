@@ -466,7 +466,7 @@ GitHub Actions workflow [`.github/workflows/docker-publish.yml`](.github/workflo
 - Git tags matching `v*` (for example `v1.2.0`): semver tags (`1.2.0`, `1.2`)
 - **Actions → Run workflow**: same as a push of that ref
 
-`main` does not build images. Workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml) copies `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` from `Development` to `main`.
+`main` does not build images. On **every push to `Development`**, CI copies `docker-compose.yml`, `.env.example`, `README.md`, and `nexusops` to `main` immediately (workflow [`.github/workflows/sync-deploy-files.yml`](.github/workflows/sync-deploy-files.yml), also started from the image pipeline). It does not wait for tests or image builds. After it finishes, `git pull` on a server clone of `main` picks up the new compose and `./nexusops`.
 
 **Optional Docker Hub**
 

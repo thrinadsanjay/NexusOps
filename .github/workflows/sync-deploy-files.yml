@@ -1,30 +1,26 @@
-# Mirror the single deploy set from Development onto main:
+# Copy the deploy files from Development to main on every Development push.
+# Does not wait for tests or image builds. No path filters (merge commits
+# sometimes skip path filters and left main stale).
+#
 #   docker-compose.yml
 #   .env.example
 #   README.md
 #   nexusops
-#
-# Application source and image builds stay on Development.
 
 name: Sync deploy files to main
 
 on:
   push:
     branches: [Development]
-    paths:
-      - docker-compose.yml
-      - README.md
-      - .env.example
-      - nexusops
-      - .github/workflows/sync-deploy-files.yml
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: sync-deploy-main
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   sync:
@@ -36,28 +32,35 @@ jobs:
       - name: Checkout Development
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           path: source
+          fetch-depth: 1
 
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
           path: dest
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+          fetch-depth: 0
 
-      - name: Copy files and push
+      - name: Copy files and push to main
         working-directory: dest
         env:
           SOURCE_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           files=(docker-compose.yml .env.example README.md nexusops)
           for f in "${files[@]}"; do
-            test -f "../source/${f}"
+            if [ ! -f "../source/${f}" ]; then
+              echo "Missing on Development: ${f}"
+              exit 1
+            fi
             cp "../source/${f}" "./${f}"
           done
           chmod +x ./nexusops
-
-          # Only docker-compose.yml is the compose file.
           rm -f ./docker-compose.server.yml ./.env.server.example
 
           git config user.name "github-actions[bot]"
@@ -66,7 +69,8 @@ jobs:
           git rm -f --ignore-unmatch docker-compose.server.yml .env.server.example
 
           if git diff --cached --quiet; then
-            echo "main already has the current deploy files."
+            echo "main already matches Development deploy files."
+            echo "main already in sync with ${SOURCE_SHA:0:7}." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -74,4 +78,7 @@ jobs:
 
           Publishes docker-compose.yml, .env.example, README.md, and nexusops.
           [skip ci]"
+
           git push origin HEAD:main
+          echo "Pushed deploy files to main from ${SOURCE_SHA:0:7}." >> "$GITHUB_STEP_SUMMARY"
+          echo "Synced to main from \`${SOURCE_SHA:0:7}\`."
