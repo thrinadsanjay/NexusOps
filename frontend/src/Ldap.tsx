@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
+import { PageHeader, btnPrimary, btnSecondary, cardClass, fieldClass, labelClass } from './ui'
 
 function authHeaders() {
   return { Authorization: `Bearer ${localStorage.getItem('nexusops_token') ?? ''}`, 'Content-Type': 'application/json' }
@@ -33,9 +34,9 @@ const SYNC_BADGE: Record<string, string> = {
   running: 'bg-amber-500/15 text-amber-300',
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-sky-400'
-const lbl = 'mb-2 block text-sm font-medium text-slate-200'
-const card = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
+const input = fieldClass
+const lbl = labelClass
+const card = cardClass
 
 // ── LDAP main panel ────────────────────────────────────────────────────────
 
@@ -129,18 +130,14 @@ export function LdapPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-sky-300">Infrastructure / LDAP</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">LDAP Integration</h2>
-        <p className="mt-2 text-slate-300">Connect to LDAP/Active Directory servers, browse the directory, and sync users.</p>
-      </div>
+      <PageHeader title="Directory" description="Connect LDAP or Active Directory, browse entries, and sync users." />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* server list */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">LDAP Servers</h3>
-            <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110">
+            <button onClick={() => setShowForm((p) => !p)} className={btnPrimary + ' px-3 py-1.5 text-xs'}>
               {showForm ? '✕' : '+ Server'}
             </button>
           </div>
@@ -162,14 +159,14 @@ export function LdapPanel() {
               <div><label className={lbl}>Attribute map (JSON)</label><textarea value={fAttrMap} onChange={(e) => setFAttrMap(e.target.value)} rows={3} className={`${input} font-mono text-xs`} /></div>
               <div><label className={lbl}>Notes</label><input value={fNotes} onChange={(e) => setFNotes(e.target.value)} className={input} /></div>
               {fErr && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{fErr}</p>}
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add server</button>
+              <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500">Add server</button>
             </form>
           )}
 
           {servers.length === 0 ? (
             <p className={`${card} text-center text-sm text-slate-400`}>No LDAP servers configured yet.</p>
           ) : servers.map((svr) => (
-            <button key={svr.id} onClick={() => setSelected(svr)} className={`group w-full rounded-2xl border p-4 text-left transition ${selected?.id === svr.id ? 'border-sky-500/40 bg-sky-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+            <button key={svr.id} onClick={() => setSelected(svr)} className={`group w-full rounded-xl border p-4 text-left transition ${selected?.id === svr.id ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-white/10 bg-[#151b24] hover:border-white/20'}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-white">{svr.name}</span>
                 <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(svr.id) }} className="hidden text-xs text-rose-400 hover:text-rose-300 group-hover:block">✕</button>
@@ -200,17 +197,17 @@ export function LdapPanel() {
                 {selected.notes && <div className="mt-2 text-sm text-slate-300">{selected.notes}</div>}
               </div>
               <div className="flex flex-wrap gap-2">
-                <button onClick={handleTest} disabled={testing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
+                <button onClick={handleTest} disabled={testing} className={btnSecondary}>
                   {testing ? '⟳ Testing…' : '⟳ Test connection'}
                 </button>
-                <button onClick={handleSync} disabled={syncing} className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-60">
+                <button onClick={handleSync} disabled={syncing} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-60">
                   {syncing ? '⟳ Syncing…' : '⟳ Sync users'}
                 </button>
               </div>
             </div>
 
             {testResult && (
-              <div className={`rounded-2xl border px-4 py-3 text-sm ${testResult.status === 'ok' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>
+              <div className={`rounded-lg border px-4 py-3 text-sm ${testResult.status === 'ok' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-rose-500/30 bg-rose-500/10 text-rose-200'}`}>
                 {testResult.status === 'ok' ? '✓ ' : '✗ '}{testResult.message}
               </div>
             )}
@@ -219,8 +216,8 @@ export function LdapPanel() {
             <div className={card}>
               <h4 className="mb-4 text-sm font-semibold text-white">Browse directory</h4>
               <div className="flex gap-3">
-                <input value={browseFilter} onChange={(e) => setBrowseFilter(e.target.value)} className="flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-sky-400" />
-                <button onClick={handleBrowse} disabled={browsing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
+                <input value={browseFilter} onChange={(e) => setBrowseFilter(e.target.value)} className="flex-1 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-indigo-400" />
+                <button onClick={handleBrowse} disabled={browsing} className={btnSecondary}>
                   {browsing ? 'Searching…' : 'Search'}
                 </button>
               </div>
@@ -229,7 +226,7 @@ export function LdapPanel() {
                   {browseResults.length === 0 ? (
                     <p className="text-sm text-slate-400">No entries found.</p>
                   ) : browseResults.map((entry, i) => (
-                    <div key={i} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                    <div key={i} className="rounded-lg border border-white/5 bg-[#0b1220] p-3">
                       <div className="font-mono text-[11px] font-semibold text-sky-300">{entry.dn}</div>
                       <div className="mt-1 flex flex-wrap gap-2">
                         {Object.entries(entry.attributes).slice(0, 6).map(([k, v]) => (
@@ -248,9 +245,9 @@ export function LdapPanel() {
               {syncLogs.length === 0 ? (
                 <p className="text-sm text-slate-400">No sync runs yet.</p>
               ) : (
-                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                    <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-3 py-3 font-medium">Started</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Found</th><th className="px-3 py-3 font-medium">Created</th><th className="px-3 py-3 font-medium">Updated</th><th className="px-3 py-3 font-medium">Duration</th></tr></thead>
+                    <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">Started</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Found</th><th className="px-3 py-3 font-medium">Created</th><th className="px-3 py-3 font-medium">Updated</th><th className="px-3 py-3 font-medium">Duration</th></tr></thead>
                     <tbody className="divide-y divide-slate-800 bg-slate-900/60">
                       {syncLogs.map((log) => {
                         const dur = log.finished_at ? Math.round((new Date(log.finished_at).getTime() - new Date(log.started_at).getTime()) / 1000) : null

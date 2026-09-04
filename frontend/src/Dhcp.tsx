@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
+import { PageHeader, btnDanger, btnPrimary, cardClass, fieldClass, labelClass } from './ui'
 
 function authHeaders() {
   const token = localStorage.getItem('nexusops_token') ?? ''
@@ -25,12 +26,12 @@ const LEASE_STATUS: Record<string, string> = {
   released: 'bg-amber-500/15 text-amber-300',
 }
 function LeaseBadge({ s }: { s: string }) {
-  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${LEASE_STATUS[s] ?? 'bg-slate-700 text-slate-300'}`}>{s}</span>
+  return <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${LEASE_STATUS[s] ?? 'bg-white/10 text-slate-300'}`}>{s}</span>
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400'
-const label = 'mb-2 block text-sm font-medium text-slate-200'
-const card = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
+const input = fieldClass
+const label = labelClass
+const card = cardClass
 
 // ── DHCP main panel ────────────────────────────────────────────────────────
 
@@ -184,18 +185,14 @@ export function DhcpPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-300">Infrastructure / DHCP</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">DHCP Management</h2>
-        <p className="mt-2 text-slate-300">Track DHCP servers, address pools, active leases, and static reservations.</p>
-      </div>
+      <PageHeader title="DHCP" description="Servers, pools, leases, and static reservations." />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* left: server + pool tree */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Servers</h3>
-            <button onClick={() => setShowServerForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110">
+            <button onClick={() => setShowServerForm((p) => !p)} className={btnPrimary + ' px-3 py-1.5 text-xs'}>
               {showServerForm ? '✕' : '+ Server'}
             </button>
           </div>
@@ -206,16 +203,16 @@ export function DhcpPanel() {
               <div><label className={label}>Host / IP</label><input value={svrHost} onChange={(e) => setSvrHost(e.target.value)} required placeholder="192.168.1.1" className={`${input} font-mono`} /></div>
               <div><label className={label}>Description</label><input value={svrDesc} onChange={(e) => setSvrDesc(e.target.value)} className={input} /></div>
               {svrErr && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{svrErr}</p>}
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add server</button>
+              <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500">Add server</button>
             </form>
           )}
 
           <div className="space-y-2">
             {servers.length === 0 ? (
-              <p className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-center text-sm text-slate-400">No DHCP servers yet.</p>
+              <p className="rounded-xl border border-white/10 bg-[#151b24] p-4 text-center text-sm text-slate-500">No DHCP servers yet.</p>
             ) : servers.map((svr) => (
-              <div key={svr.id} className="rounded-2xl border border-slate-800 bg-slate-900/80">
-                <button onClick={() => handleSelectServer(svr)} className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${selected?.id === svr.id ? 'bg-amber-500/10' : 'hover:bg-slate-800/50'}`}>
+              <div key={svr.id} className="rounded-xl border border-white/10 bg-[#151b24]">
+                <button onClick={() => handleSelectServer(svr)} className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${selected?.id === svr.id ? 'bg-indigo-500/10' : 'hover:bg-slate-800/50'}`}>
                   <div>
                     <div className="font-semibold text-white">{svr.name}</div>
                     <div className="font-mono text-[11px] text-slate-400">{svr.host}</div>
@@ -225,7 +222,7 @@ export function DhcpPanel() {
                 {selected?.id === svr.id && (
                   <div className="border-t border-slate-800 px-3 py-2 space-y-1">
                     {svr.pools.map((pool) => (
-                      <button key={pool.id} onClick={() => handleSelectPool(pool)} className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${selectedPool?.id === pool.id ? 'bg-amber-500/15 text-amber-300' : 'text-slate-300 hover:bg-slate-800'}`}>
+                      <button key={pool.id} onClick={() => handleSelectPool(pool)} className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${selectedPool?.id === pool.id ? 'bg-indigo-500/15 text-white' : 'text-slate-300 hover:bg-white/5'}`}>
                         <div>
                           <div className="font-mono text-xs font-semibold">{pool.subnet}</div>
                           <div className="text-[10px] text-slate-400">{pool.leases.filter(l => l.status === 'active').length} active leases</div>
@@ -258,8 +255,8 @@ export function DhcpPanel() {
               <div><label className={label}>Description</label><input value={pDesc} onChange={(e) => setPDesc(e.target.value)} className={input} /></div>
               {pErr && <p className="md:col-span-2 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{pErr}</p>}
               <div className="md:col-span-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setShowPoolForm(false)} className="rounded-2xl border border-slate-700 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800">Cancel</button>
-                <button type="submit" className="rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Create pool</button>
+                <button type="button" onClick={() => setShowPoolForm(false)} className="rounded-lg border border-white/10 px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5">Cancel</button>
+                <button type="submit" className={btnPrimary}>Create pool</button>
               </div>
             </form>
           )}
@@ -287,7 +284,7 @@ export function DhcpPanel() {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setShowLeaseForm((p) => !p); setShowResForm(false) }} className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20">{showLeaseForm ? '✕' : '+ Lease'}</button>
-                    <button onClick={() => { setShowResForm((p) => !p); setShowLeaseForm(false) }} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20">{showResForm ? '✕' : '+ Reservation'}</button>
+                    <button onClick={() => { setShowResForm((p) => !p); setShowLeaseForm(false) }} className="rounded-xl border border-amber-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20">{showResForm ? '✕' : '+ Reservation'}</button>
                   </div>
                 </div>
               </div>
@@ -299,7 +296,7 @@ export function DhcpPanel() {
                   <div><label className={label}>MAC address</label><input value={lMac} onChange={(e) => setLMac(e.target.value)} required placeholder="aa:bb:cc:dd:ee:ff" className={`${input} font-mono`} /></div>
                   <div><label className={label}>Hostname</label><input value={lHost} onChange={(e) => setLHost(e.target.value)} className={input} /></div>
                   {lErr && <p className="md:col-span-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{lErr}</p>}
-                  <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-emerald-500 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add lease</button></div>
+                  <div className="md:col-span-3 flex justify-end"><button type="submit" className={btnPrimary}>Add lease</button></div>
                 </form>
               )}
 
@@ -311,16 +308,16 @@ export function DhcpPanel() {
                   <div><label className={label}>Hostname</label><input value={resHost} onChange={(e) => setResHost(e.target.value)} className={input} /></div>
                   <div><label className={label}>Description</label><input value={resDesc} onChange={(e) => setResDesc(e.target.value)} className={input} /></div>
                   {resErr && <p className="md:col-span-2 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{resErr}</p>}
-                  <div className="md:col-span-2 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add reservation</button></div>
+                  <div className="md:col-span-2 flex justify-end"><button type="submit" className={btnPrimary}>Add reservation</button></div>
                 </form>
               )}
 
               {/* leases table */}
               <div className={card}>
                 <h3 className="mb-4 text-base font-semibold text-white">Active leases</h3>
-                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                    <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Expires</th><th className="px-3 py-3" /></tr></thead>
+                    <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Expires</th><th className="px-3 py-3" /></tr></thead>
                     <tbody className="divide-y divide-slate-800 bg-slate-900/60">
                       {selectedPool.leases.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">No leases.</td></tr>
                         : selectedPool.leases.map((l) => (
@@ -331,10 +328,10 @@ export function DhcpPanel() {
                             <td className="px-3 py-3"><LeaseBadge s={l.status} /></td>
                             <td className="px-3 py-3 text-[11px] text-slate-400">{l.lease_end ? new Date(l.lease_end).toLocaleString() : '—'}</td>
                             <td className="px-3 py-3 text-right space-x-2">
-                              <button onClick={() => handlePromote(l.id)} disabled={promoting === l.id} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20 disabled:opacity-60">
+                              <button onClick={() => handlePromote(l.id)} disabled={promoting === l.id} className="rounded-xl border border-amber-500/30 bg-indigo-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20 disabled:opacity-60">
                                 {promoting === l.id ? '…' : 'Reserve'}
                               </button>
-                              <button onClick={() => handleDeleteLease(l.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button>
+                              <button onClick={() => handleDeleteLease(l.id)} className={btnDanger}>✕</button>
                             </td>
                           </tr>
                         ))}
@@ -346,9 +343,9 @@ export function DhcpPanel() {
               {/* reservations table */}
               <div className={card}>
                 <h3 className="mb-4 text-base font-semibold text-white">Static reservations</h3>
-                <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                    <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Description</th><th className="px-3 py-3" /></tr></thead>
+                    <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Description</th><th className="px-3 py-3" /></tr></thead>
                     <tbody className="divide-y divide-slate-800 bg-slate-900/60">
                       {selectedPool.reservations.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-400">No reservations. Use "Reserve" on a lease or add one manually.</td></tr>
                         : selectedPool.reservations.map((res) => (
@@ -357,7 +354,7 @@ export function DhcpPanel() {
                             <td className="px-3 py-3 font-mono text-slate-300">{res.mac_address}</td>
                             <td className="px-3 py-3 text-slate-200">{res.hostname ?? '—'}</td>
                             <td className="px-3 py-3 text-slate-400">{res.description ?? '—'}</td>
-                            <td className="px-3 py-3 text-right"><button onClick={() => handleDeleteReservation(res.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button></td>
+                            <td className="px-3 py-3 text-right"><button onClick={() => handleDeleteReservation(res.id)} className={btnDanger}>✕</button></td>
                           </tr>
                         ))}
                     </tbody>
@@ -372,11 +369,11 @@ export function DhcpPanel() {
             <div className={card}>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h3 className="text-base font-semibold text-white">All leases</h3>
-                <input value={leaseFilter} onChange={(e) => setLeaseFilter(e.target.value)} placeholder="Filter IP, MAC, hostname…" className="w-56 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-400" />
+                <input value={leaseFilter} onChange={(e) => setLeaseFilter(e.target.value)} placeholder="Filter IP, MAC, hostname…" className="w-56 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400" />
               </div>
-              <div className="overflow-x-auto rounded-2xl border border-slate-800">
+              <div className="overflow-x-auto rounded-lg border border-white/10">
                 <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                  <thead className="bg-slate-950/80 text-slate-300"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Last seen</th></tr></thead>
+                  <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Last seen</th></tr></thead>
                   <tbody className="divide-y divide-slate-800 bg-slate-900/60">
                     {filteredAllLeases.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-400">{allLeases.length === 0 ? 'No leases recorded yet.' : 'No matches.'}</td></tr>
                       : filteredAllLeases.map((l) => (

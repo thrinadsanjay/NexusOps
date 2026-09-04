@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
+import { PageHeader, btnDanger, btnPrimary, cardClass, fieldClass, labelClass, tableWrapClass } from './ui'
 
 function authHeaders() {
   return { Authorization: `Bearer ${localStorage.getItem('nexusops_token') ?? ''}`, 'Content-Type': 'application/json' }
@@ -26,7 +27,7 @@ const TYPE_BADGE: Record<string, string> = {
   email:    'bg-sky-500/15 text-sky-300',
 }
 function StatusPill({ s }: { s: string }) {
-  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${CERT_STATUS[s] ?? 'bg-slate-700 text-slate-300'}`}>{s}</span>
+  return <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${CERT_STATUS[s] ?? 'bg-white/10 text-slate-300'}`}>{s}</span>
 }
 function TypePill({ t }: { t: string }) {
   return <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${TYPE_BADGE[t] ?? 'bg-slate-700 text-slate-300'}`}>{t}</span>
@@ -42,9 +43,9 @@ function ExpiryChip({ iso }: { iso: string | null }) {
   return <span className={`font-mono text-sm ${cls}`}>{days < 0 ? `${Math.abs(days)}d ago` : `${days}d`}</span>
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-rose-400'
-const lbl = 'mb-2 block text-sm font-medium text-slate-200'
-const card = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
+const input = fieldClass
+const lbl = labelClass
+const card = cardClass
 
 // ── PKI main panel ─────────────────────────────────────────────────────────
 
@@ -135,11 +136,7 @@ export function PkiPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-rose-300">Infrastructure / PKI</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Certificate Management</h2>
-        <p className="mt-2 text-slate-300">Track certificate authorities, issued certificates, and expiry across your homelab.</p>
-      </div>
+      <PageHeader title="Certificates" description="Certificate authorities, issued certificates, and expiry tracking." />
 
       {/* expiry summary */}
       {summary && (
@@ -164,7 +161,7 @@ export function PkiPanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Certificate Authorities</h3>
-            <button onClick={() => setShowCaForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:brightness-110">
+            <button onClick={() => setShowCaForm((p) => !p)} className={btnPrimary + ' px-3 py-1.5 text-xs'}>
               {showCaForm ? '✕' : '+ CA'}
             </button>
           </div>
@@ -176,17 +173,17 @@ export function PkiPanel() {
               <div><label className={lbl}>Expires (optional)</label><input type="datetime-local" value={caExpiry} onChange={(e) => setCaExpiry(e.target.value)} className={input} /></div>
               <div className="flex items-center gap-2"><input type="checkbox" checked={caRoot} onChange={(e) => setCaRoot(e.target.checked)} className="h-4 w-4" /><label className="text-sm text-slate-200">Root CA</label></div>
               {caErr && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{caErr}</p>}
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 py-2.5 text-sm font-semibold text-white transition hover:brightness-110">Add CA</button>
+              <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500">Add CA</button>
             </form>
           )}
 
-          <button onClick={() => setSelectedCa(null)} className={`group w-full rounded-2xl border px-4 py-3 text-left transition ${!selectedCa ? 'border-rose-500/40 bg-rose-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+          <button onClick={() => setSelectedCa(null)} className={`group w-full rounded-xl border px-4 py-3 text-left transition ${!selectedCa ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-white/10 bg-[#151b24] hover:border-white/20'}`}>
             <div className="text-sm font-semibold text-white">All CAs</div>
             <div className="text-[11px] text-slate-400">{certs.length} certificates total</div>
           </button>
 
           {cas.map((ca) => (
-            <button key={ca.id} onClick={() => setSelectedCa(ca)} className={`group w-full rounded-2xl border px-4 py-3 text-left transition ${selectedCa?.id === ca.id ? 'border-rose-500/40 bg-rose-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+            <button key={ca.id} onClick={() => setSelectedCa(ca)} className={`group w-full rounded-xl border px-4 py-3 text-left transition ${selectedCa?.id === ca.id ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-white/10 bg-[#151b24] hover:border-white/20'}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-white">{ca.name}</span>
                 <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteCa(ca.id) }} className="hidden text-[10px] text-rose-400 group-hover:block">✕</button>
@@ -206,7 +203,7 @@ export function PkiPanel() {
             <h3 className="text-base font-semibold text-white">
               {selectedCa ? `Certificates issued by ${selectedCa.name}` : 'All certificates'}
             </h3>
-            <button onClick={() => setShowCertForm((p) => !p)} className="rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-rose-500/20 transition hover:brightness-110">
+            <button onClick={() => setShowCertForm((p) => !p)} className={btnPrimary}>
               {showCertForm ? '✕ Cancel' : '+ Certificate'}
             </button>
           </div>
@@ -215,12 +212,12 @@ export function PkiPanel() {
             <form onSubmit={handleCreateCert} className={`${card} grid gap-3 md:grid-cols-2 xl:grid-cols-3`}>
               <div><label className={lbl}>Common name *</label><input value={cCn} onChange={(e) => setCCn(e.target.value)} required placeholder="server.homelab.local" className={input} /></div>
               <div><label className={lbl}>Type</label>
-                <select value={cType} onChange={(e) => setCType(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-rose-400">
+                <select value={cType} onChange={(e) => setCType(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
                   <option value="server">Server</option><option value="client">Client</option><option value="wildcard">Wildcard</option><option value="email">Email</option>
                 </select>
               </div>
               <div><label className={lbl}>CA</label>
-                <select value={cCaId} onChange={(e) => setCCaId(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-rose-400">
+                <select value={cCaId} onChange={(e) => setCCaId(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
                   <option value="">— none —</option>{cas.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
@@ -232,25 +229,25 @@ export function PkiPanel() {
               <div><label className={lbl}>Notes</label><input value={cNotes} onChange={(e) => setCNotes(e.target.value)} className={input} /></div>
               {cErr && <p className="md:col-span-2 xl:col-span-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{cErr}</p>}
               <div className="md:col-span-2 xl:col-span-3 flex justify-end">
-                <button type="submit" className="rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 px-5 py-2.5 font-semibold text-white shadow-lg shadow-rose-500/20 transition hover:brightness-110">Add certificate</button>
+                <button type="submit" className={btnPrimary}>Add certificate</button>
               </div>
             </form>
           )}
 
           {/* filters */}
           <div className="flex flex-wrap gap-3">
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by CN, issued to, serial…" className="flex-1 min-w-[200px] rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-rose-400" />
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-rose-400">
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by CN, issued to, serial…" className="flex-1 min-w-[200px] rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400" />
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
               <option value="">All statuses</option><option value="active">Active</option><option value="expired">Expired</option><option value="revoked">Revoked</option><option value="pending">Pending</option>
             </select>
-            <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-rose-400">
+            <select value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)} className="rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
               <option value="">Any expiry</option><option value="30">Expiring ≤ 30d</option><option value="90">Expiring ≤ 90d</option><option value="expired">Already expired</option>
             </select>
           </div>
 
-          <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+          <div className={tableWrapClass}>
             <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-              <thead className="bg-slate-950/80 text-slate-300">
+              <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500">
                 <tr><th className="px-4 py-3 font-medium">Common name</th><th className="px-4 py-3 font-medium">Type</th><th className="px-4 py-3 font-medium">Issued to</th><th className="px-4 py-3 font-medium">CA</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Expires</th><th className="px-4 py-3 font-medium">Days left</th><th className="px-4 py-3" /></tr>
               </thead>
               <tbody className="divide-y divide-slate-800 bg-slate-900/60">
@@ -271,9 +268,9 @@ export function PkiPanel() {
                       <td className="px-4 py-3"><ExpiryChip iso={cert.expires_at} /></td>
                       <td className="px-4 py-3 text-right space-x-2">
                         {cert.status === 'active' && (
-                          <button onClick={() => handleRevoke(cert.id)} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20">Revoke</button>
+                          <button onClick={() => handleRevoke(cert.id)} className="rounded-xl border border-amber-500/30 bg-indigo-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20">Revoke</button>
                         )}
-                        <button onClick={() => handleDeleteCert(cert.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-300 hover:bg-rose-500/20">✕</button>
+                        <button onClick={() => handleDeleteCert(cert.id)} className={btnDanger}>✕</button>
                       </td>
                     </tr>
                   )

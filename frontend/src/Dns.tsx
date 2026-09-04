@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
+import { PageHeader, btnDanger, btnPrimary, btnSecondary, cardClass, fieldClass, labelClass, tableWrapClass } from './ui'
 
 function authHeaders() {
   const token = localStorage.getItem('nexusops_token') ?? ''
@@ -43,9 +44,9 @@ const STATUS_BADGE: Record<string, string> = {
   inactive: 'bg-slate-700 text-slate-400 border-slate-600',
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20'
-const label = 'mb-2 block text-sm font-medium text-slate-200'
-const card = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
+const input = fieldClass
+const label = labelClass
+const card = cardClass
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'PTR', 'NS', 'SRV', 'SOA', 'CAA']
 
@@ -163,18 +164,14 @@ export function DnsOverview() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-300">Infrastructure / DNS</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">DNS Management</h2>
-        <p className="mt-2 text-slate-300">Manage zones and records for your homelab DNS infrastructure.</p>
-      </div>
+      <PageHeader title="DNS" description="Zones and records for internal name resolution." />
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* zone list */}
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-white">Zones</h3>
-            <button onClick={() => setShowZoneForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110">
+            <button onClick={() => setShowZoneForm((p) => !p)} className={btnPrimary + ' px-3 py-1.5 text-xs'}>
               {showZoneForm ? '✕' : '+ Zone'}
             </button>
           </div>
@@ -183,23 +180,23 @@ export function DnsOverview() {
             <form onSubmit={handleCreateZone} className={`${card} space-y-3`}>
               <div><label className={label}>Zone name</label><input value={zoneName} onChange={(e) => setZoneName(e.target.value)} required placeholder="homelab.local" className={input} /></div>
               <div><label className={label}>Type</label>
-                <select value={zoneKind} onChange={(e) => setZoneKind(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400">
+                <select value={zoneKind} onChange={(e) => setZoneKind(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20">
                   <option value="forward">Forward</option><option value="reverse">Reverse</option>
                 </select>
               </div>
               <div><label className={label}>Default TTL (s)</label><input type="number" value={zoneTtl} onChange={(e) => setZoneTtl(e.target.value)} className={input} /></div>
               <div><label className={label}>Description</label><input value={zoneDesc} onChange={(e) => setZoneDesc(e.target.value)} className={input} /></div>
               {zoneError && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{zoneError}</p>}
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Create zone</button>
+              <button type="submit" className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500">Create zone</button>
             </form>
           )}
 
           <div className="space-y-2">
             {zones.length === 0 ? (
-              <p className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-center text-sm text-slate-400">No zones yet.</p>
+              <p className="rounded-xl border border-white/10 bg-[#151b24] p-4 text-center text-sm text-slate-500">No zones yet.</p>
             ) : zones.map((z) => (
               <button key={z.id} onClick={() => handleSelectZone(z)}
-                className={`group w-full rounded-2xl border p-3 text-left transition ${selectedZone?.id === z.id ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
+                className={`group w-full rounded-xl border p-3 text-left transition ${selectedZone?.id === z.id ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-white/10 bg-[#151b24] hover:border-white/20'}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-mono text-sm font-semibold text-white">{z.name}</span>
                   <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteZone(z.id) }} className="hidden rounded-lg px-1.5 py-0.5 text-[11px] text-rose-400 hover:bg-rose-500/10 group-hover:block">✕</button>
@@ -226,17 +223,17 @@ export function DnsOverview() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {selectedZone.kind === 'forward' && (
-                    <button onClick={handleImport} disabled={importing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
+                    <button onClick={handleImport} disabled={importing} className={btnSecondary + ' text-xs'}>
                       {importing ? 'Importing…' : '⟳ Import A from IPAM'}
                     </button>
                   )}
-                  <button onClick={() => setShowRecordForm((p) => !p)} className="rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110">
+                  <button onClick={() => setShowRecordForm((p) => !p)} className={btnPrimary}>
                     {showRecordForm ? '✕ Cancel' : '+ Record'}
                   </button>
                 </div>
               </div>
 
-              {importMsg && <p className={`rounded-2xl px-3 py-2 text-sm ${importMsg.includes('failed') ? 'bg-rose-500/10 text-rose-300' : 'bg-emerald-500/10 text-emerald-300'}`}>{importMsg}</p>}
+              {importMsg && <p className={`rounded-lg px-3 py-2 text-sm ${importMsg.includes('failed') ? 'bg-rose-500/10 text-rose-300' : 'bg-emerald-500/10 text-emerald-300'}`}>{importMsg}</p>}
 
               {/* type summary badges */}
               <div className="flex flex-wrap gap-2">
@@ -252,7 +249,7 @@ export function DnsOverview() {
                 <form onSubmit={handleCreateRecord} className={`${card} grid gap-3 md:grid-cols-2 xl:grid-cols-3`}>
                   <div><label className={label}>Name (@ for apex)</label><input value={recName} onChange={(e) => setRecName(e.target.value)} required placeholder="www" className={`${input} font-mono`} /></div>
                   <div><label className={label}>Type</label>
-                    <select value={recType} onChange={(e) => setRecType(e.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-bold text-slate-100 outline-none focus:border-indigo-400">
+                    <select value={recType} onChange={(e) => setRecType(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-semibold text-sm text-slate-100 outline-none focus:border-indigo-400">
                       {RECORD_TYPES.map((t) => <option key={t}>{t}</option>)}
                     </select>
                   </div>
@@ -262,20 +259,20 @@ export function DnsOverview() {
                     <div><label className={label}>Priority</label><input type="number" value={recPriority} onChange={(e) => setRecPriority(e.target.value)} className={input} /></div>
                   )}
                   <div><label className={label}>Comment</label><input value={recComment} onChange={(e) => setRecComment(e.target.value)} className={input} /></div>
-                  {recError && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{recError}</p>}
+                  {recError && <p className="md:col-span-2 xl:col-span-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{recError}</p>}
                   <div className="md:col-span-2 xl:col-span-3 flex justify-end">
-                    <button type="submit" className="rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-500 px-5 py-2.5 font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:brightness-110">Add record</button>
+                    <button type="submit" className={btnPrimary}>Add record</button>
                   </div>
                 </form>
               )}
 
               <div className="flex gap-3">
-                <input value={recordSearch} onChange={(e) => setRecordSearch(e.target.value)} placeholder="Search name or value…" className="flex-1 rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400" />
+                <input value={recordSearch} onChange={(e) => setRecordSearch(e.target.value)} placeholder="Search name or value…" className="flex-1 rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400" />
               </div>
 
-              <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+              <div className={tableWrapClass}>
                 <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                  <thead className="bg-slate-950/80 text-slate-300">
+                  <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500">
                     <tr><th className="px-4 py-3 font-medium">Name</th><th className="px-4 py-3 font-medium">Type</th><th className="px-4 py-3 font-medium">Value</th><th className="px-4 py-3 font-medium">TTL</th><th className="px-4 py-3 font-medium">Priority</th><th className="px-4 py-3 font-medium">Comment</th><th className="px-4 py-3" /></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 bg-slate-900/60">
@@ -291,7 +288,7 @@ export function DnsOverview() {
                         <td className="px-4 py-3 font-mono text-slate-400">{rec.ttl ?? `${selectedZone.default_ttl}*`}</td>
                         <td className="px-4 py-3 text-slate-400">{rec.priority ?? '—'}</td>
                         <td className="px-4 py-3 text-slate-400">{rec.comment ?? '—'}</td>
-                        <td className="px-4 py-3 text-right"><button onClick={() => handleDeleteRecord(rec.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                        <td className="px-4 py-3 text-right"><button onClick={() => handleDeleteRecord(rec.id)} className={btnDanger}>Delete</button></td>
                       </tr>
                     ))}
                   </tbody>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { API_BASE_URL } from './apiBase'
+import { PageHeader, btnGhost, btnSecondary, cardClass } from './ui'
 
 function authHeaders() {
   return { Authorization: `Bearer ${localStorage.getItem('nexusops_token') ?? ''}`, 'Content-Type': 'application/json' }
@@ -65,7 +66,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 type LdapServer = { id: number; name: string; host: string; port: number; last_test_status: string | null }
 
 function ToolCard({ tool }: { tool: Tool }) {
-  const className = 'group rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] transition hover:-translate-y-1 hover:border-slate-700'
+  const className = `${cardClass} group transition hover:border-indigo-500/30`
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -124,11 +125,7 @@ export function ToolsPanel() {
 
   return (
     <section className="space-y-8">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-300">NexusOps · Integrations</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Tools & Integrations</h2>
-        <p className="mt-2 text-slate-300">Bundled services and operator shortcuts in one place.</p>
-      </div>
+      <PageHeader title="Integrations" description="Bundled services and operator shortcuts." />
 
       {ldapServers.length > 0 && (
         <div>
@@ -138,7 +135,7 @@ export function ToolsPanel() {
               const testRes = testResults[svr.name]
               const status = testRes ? (testRes === 'ok' ? 'ok' : 'error') : svr.last_test_status
               return (
-                <div key={svr.id} className="rounded-[24px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+                <div key={svr.id} className="rounded-xl border border-white/10 bg-[#151b24] p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold text-white">{svr.name}</div>
@@ -152,11 +149,11 @@ export function ToolsPanel() {
                   </div>
                   {testRes && testRes !== 'ok' && <p className="mt-2 rounded-xl bg-rose-500/10 px-2 py-1 text-[11px] text-rose-200">{testRes}</p>}
                   <div className="mt-4 flex gap-2">
-                    <button onClick={() => handleTestLdap(svr.id, svr.name)} disabled={testing === svr.name} className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
-                      {testing === svr.name ? '⟳ Testing…' : '⟳ Test'}
+                    <button onClick={() => handleTestLdap(svr.id, svr.name)} disabled={testing === svr.name} className={btnSecondary}>
+                      {testing === svr.name ? 'Testing…' : 'Test'}
                     </button>
-                    <Link to="/ldap" className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-800">
-                      Open LDAP →
+                    <Link to="/ldap" className={btnGhost}>
+                      Open directory
                     </Link>
                   </div>
                 </div>
@@ -180,7 +177,7 @@ export function ToolsPanel() {
         </div>
       ))}
 
-      <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5">
+      <div className="rounded-xl border border-white/10 bg-[#151b24] p-5">
         <h3 className="mb-4 text-sm font-semibold text-white">LDAP Credentials (bundled directory)</h3>
         <div className="grid gap-3 md:grid-cols-2">
           {[
@@ -188,7 +185,7 @@ export function ToolsPanel() {
             { user: 'operator1', pass: 'Operator123!', role: 'Operator', badge: 'bg-amber-500/15 text-amber-300' },
             { user: 'viewer1', pass: 'Viewer123!', role: 'Viewer', badge: 'bg-slate-700 text-slate-300' },
           ].map(({ user, pass, role, badge }) => (
-            <div key={user} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+            <div key={user} className="rounded-lg border border-white/5 bg-[#0b1220] p-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="font-mono text-sm font-semibold text-white">{user}</span>
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${badge}`}>{role}</span>
