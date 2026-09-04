@@ -110,11 +110,17 @@ def create_subnet(
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("ipam:write")),
 ) -> Subnet:
-    if db.query(Subnet).filter(Subnet.cidr == payload.cidr).first():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Subnet {payload.cidr} already exists")
+    try:
+        cidr = str(ipaddress.ip_network(payload.cidr, strict=False))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid CIDR: {payload.cidr}") from exc
+    if db.query(Subnet).filter(Subnet.cidr == cidr).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Subnet {cidr} already exists")
     if payload.vlan_id and not db.query(VLan).filter(VLan.id == payload.vlan_id).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="VLAN not found")
-    subnet = Subnet(**payload.model_dump())
+    data = payload.model_dump()
+    data["cidr"] = cidr
+    subnet = Subnet(**data)
     db.add(subnet)
     db.commit()
     db.refresh(subnet)
