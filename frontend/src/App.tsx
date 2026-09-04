@@ -9,6 +9,7 @@ import { DhcpPanel } from './Dhcp'
 import { PkiPanel } from './Pki'
 import { LdapPanel } from './Ldap'
 import { ToolsPanel } from './Tools'
+import { Login } from './Login'
 import { Badge, KpiCard, PageHeader, btnSecondary, cardClass, fieldClass, tableWrapClass } from './ui'
 
 type AuthUser = {
@@ -377,98 +378,6 @@ function App() {
       ) : (
         <main className="min-h-screen">{renderRoutes()}</main>
       )}
-    </div>
-  )
-}
-
-type LoginProps = {
-  onSubmit: (username: string, password: string) => Promise<void> | void
-  loading: boolean
-  error: string
-}
-
-function Login({ onSubmit, loading, error }: LoginProps) {
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('ChangeMe123!')
-
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault()
-    await onSubmit(username, password)
-  }
-
-  return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-xl border border-white/10 bg-[#151b24] md:grid-cols-[1.05fr_0.95fr]">
-        <div className="bg-[#0b1220] p-8 md:p-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300">
-            Secure access
-          </div>
-          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white">Welcome back</h1>
-          <p className="mt-4 max-w-md text-base leading-7 text-slate-400">
-            Sign in to manage infrastructure, identity, and platform operations from one control plane.
-          </p>
-          <div className="mt-8 space-y-3 text-sm text-slate-300">
-            {['Role-based access control', 'Audit log and API tokens', 'Network, DNS, DHCP, and directory'].map((item) => (
-              <div key={item} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
-                <span className="inline-flex h-2 w-2 rounded-full bg-indigo-400" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="p-8 md:p-10">
-          <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-              N
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">NexusOps</p>
-              <h2 className="text-2xl font-semibold text-white">Sign in</h2>
-            </div>
-          </div>
-
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="username" className="mb-2 block text-sm font-medium text-slate-200">
-                Username or email
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-3 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-200">
-                Password
-              </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-3 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            {error && <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-200">{error}</p>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-indigo-600 px-4 py-3.5 font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
-        </div>
-      </div>
     </div>
   )
 }
