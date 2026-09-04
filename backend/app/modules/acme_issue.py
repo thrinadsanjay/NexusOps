@@ -60,6 +60,14 @@ def dns_records_from_pending(pending: dict) -> list[dict]:
     return records
 
 
+def http_urls_from_pending(pending: dict) -> list[str]:
+    return [
+        f"http://{item['identifier']}/.well-known/acme-challenge/{item['token']}"
+        for item in pending.get("challenges") or []
+        if item.get("type") == "http-01" and item.get("identifier") and item.get("token")
+    ]
+
+
 def choose_challenge_type(names: list[str], requested: str | None) -> str:
     wanted = (requested or "").strip() or None
     wildcard = any(name.startswith("*.") for name in names)
@@ -67,7 +75,8 @@ def choose_challenge_type(names: list[str], requested: str | None) -> str:
         raise AcmeError("Wildcard names require DNS-01. Let's Encrypt cannot validate *.domains over HTTP.")
     if wanted in {"http-01", "dns-01"}:
         return wanted
-    return "dns-01" if wildcard else "http-01"
+    # Homelab hosts are rarely reachable on public port 80, so DNS-01 is the default.
+    return "dns-01"
 
 
 def start_issue(db: Session, cert: Certificate, ca: CertificateAuthority, challenge_type: str | None = None) -> dict:
@@ -108,9 +117,9 @@ def start_issue(db: Session, cert: Certificate, ca: CertificateAuthority, challe
         db.commit()
         db.refresh(cert)
 
-        if selected_type == "http-01" or ca.dns_provider == "cloudflare":
+        if ca.dns_provider == "cloudflare" and selected_type == "dns-01":
             try:
-                return complete_issue(db, cert, ca, wait_seconds=25 if ca.dns_provider == "cloudflare" else 2)
+                return complete_issue(db, cert, ca, wait_seconds=25)
             except AcmeError as exc:
                 cert.acme_error = str(exc)
                 db.commit()
@@ -135,7 +144,13 @@ def complete_issue(db: Session, cert: Certificate, ca: CertificateAuthority, wai
             client.answer_challenge(item["url"])
         order = client.wait_order(cert.acme_order_url)
         if order.status == "invalid":
-            raise AcmeError("Let's Encrypt could not validate the HTTP or DNS challenge")
+            detail = client.authorization_error_detail(order)
+            if detail:
+                raise AcmeError(detail)
+            raise AcmeError(
+                "Let's Encrypt could not validate the challenge. For a hostname like "
+                "lab-prd-server01.sanjay-lab.online use DNS-01: publish the TXT records, wait, then complete."
+            )
         if order.status != "ready" and order.status != "valid":
             raise AcmeError(f"Order is not ready yet (status={order.status})")
         if order.status != "valid":

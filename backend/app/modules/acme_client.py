@@ -234,6 +234,24 @@ class AcmeClient:
             delay = min(delay * 1.4, 8)
         raise AcmeError(f"ACME order did not become ready (status={last.status if last else 'unknown'})")
 
+    def authorization_error_detail(self, order: AcmeOrder) -> str:
+        parts: list[str] = []
+        for authz_url in order.authorizations:
+            body, response = self._signed_post(authz_url, None)
+            if response.status_code != 200 or not isinstance(body, dict):
+                continue
+            ident = body.get("identifier", {}).get("value") or "host"
+            errors = []
+            if isinstance(body.get("error"), dict) and body["error"].get("detail"):
+                errors.append(str(body["error"]["detail"]))
+            for challenge in body.get("challenges") or []:
+                err = challenge.get("error") or {}
+                if err.get("detail"):
+                    errors.append(str(err["detail"]))
+            if errors:
+                parts.append(f"{ident}: {errors[0]}")
+        return "; ".join(parts)
+
     def finalize(self, order: AcmeOrder, csr_der: bytes) -> AcmeOrder:
         body, response = self._signed_post(order.finalize, {"csr": b64url(csr_der)})
         if response.status_code not in {200, 201}:

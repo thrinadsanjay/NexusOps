@@ -49,6 +49,7 @@ export type Cert = {
   acme_challenge_type: string | null
   acme_error: string | null
   acme_dns_records: DnsTxt[] | null
+  acme_http_urls: string[] | null
 }
 export type ExpirySummary = { active: number; expired: number; revoked: number; expiring_30d: number; expiring_90d: number }
 
@@ -131,7 +132,7 @@ export function PkiPanel() {
   const [cExpiresAt, setCExpiresAt] = useState('')
   const [cCaId, setCCaId] = useState('')
   const [cNotes, setCNotes] = useState('')
-  const [cChallenge, setCChallenge] = useState('')
+  const [cChallenge, setCChallenge] = useState('dns-01')
   const [cErr, setCErr] = useState('')
 
   const load = useCallback(() => {
@@ -227,7 +228,7 @@ export function PkiPanel() {
     if (!res.ok) { setCErr(errDetail(data.detail, 'Failed to add certificate')); return }
     setCerts((p) => [...p, data])
     setCCn(''); setCIssuedTo(''); setCSans(''); setCSerial(''); setCIssuedAt(''); setCExpiresAt(''); setCNotes(''); setShowCertForm(false)
-    if (isAcmeIssue) await startIssue(data.id, cChallenge || undefined)
+    if (isAcmeIssue) await startIssue(data.id, cChallenge || 'dns-01')
     else load()
   }
 
@@ -383,9 +384,8 @@ export function PkiPanel() {
                 <div>
                   <label className={lbl}>Let&apos;s Encrypt challenge</label>
                   <select value={cChallenge} onChange={(e) => setCChallenge(e.target.value)} className={input}>
-                    <option value="">Auto (DNS-01 for wildcards)</option>
-                    <option value="dns-01">DNS-01 (required for *.domains)</option>
-                    <option value="http-01">HTTP-01 (port 80 on this host)</option>
+                    <option value="dns-01">DNS-01 (TXT record — use this)</option>
+                    <option value="http-01">HTTP-01 (only if port 80 on this name hits NexusOps)</option>
                   </select>
                 </div>
               ) : (
@@ -398,7 +398,7 @@ export function PkiPanel() {
               <div><label className={lbl}>Notes</label><input value={cNotes} onChange={(e) => setCNotes(e.target.value)} className={input} /></div>
               {isAcmeIssue && (
                 <p className="md:col-span-2 xl:col-span-3 text-xs leading-5 text-slate-400">
-                  Let&apos;s Encrypt will sign this name. For a wildcard, publish the TXT records it shows, then click Complete issuance. Cloudflare can do that automatically if you saved a token on the CA.
+                  Publish the TXT records NexusOps shows at your public DNS (Cloudflare, registrar, etc.). Hostnames like lab-prd-server01.sanjay-lab.online cannot use HTTP-01 unless that name&apos;s port 80 reaches this NexusOps host. Then click Complete issuance.
                 </p>
               )}
               {cErr && <div className="md:col-span-2 xl:col-span-3"><Alert>{cErr}</Alert></div>}
@@ -437,11 +437,20 @@ export function PkiPanel() {
                         {cert.acme_error && <p className="mt-1 max-w-xs text-[11px] text-rose-300">{cert.acme_error}</p>}
                         {cert.status === 'pending' && cert.acme_dns_records?.length ? (
                           <div className="mt-2 space-y-1 rounded-lg border border-white/10 bg-[#0b1220] p-2">
+                            <p className="text-[10px] uppercase tracking-wide text-slate-500">Publish these TXT records, then Complete issuance</p>
                             {cert.acme_dns_records.map((rec) => (
                               <div key={rec.name + rec.value} className="text-[11px] text-slate-300">
                                 <div className="font-mono text-indigo-200">{rec.name}</div>
                                 <div className="break-all font-mono text-slate-400">TXT {rec.value}</div>
                               </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {cert.status === 'pending' && cert.acme_http_urls?.length ? (
+                          <div className="mt-2 space-y-1 rounded-lg border border-white/10 bg-[#0b1220] p-2">
+                            <p className="text-[10px] uppercase tracking-wide text-slate-500">Let&apos;s Encrypt will fetch</p>
+                            {cert.acme_http_urls.map((url) => (
+                              <div key={url} className="break-all font-mono text-[11px] text-indigo-200">{url}</div>
                             ))}
                           </div>
                         ) : null}
@@ -456,7 +465,7 @@ export function PkiPanel() {
                         <div className="flex flex-wrap justify-end gap-2">
                           {ca?.kind === 'acme' && cert.status === 'pending' && (
                             <>
-                              <button type="button" disabled={busyId === cert.id} onClick={() => void startIssue(cert.id)} className={btnGhost}>{busyId === cert.id ? 'Working…' : 'Retry issue'}</button>
+                              <button type="button" disabled={busyId === cert.id} onClick={() => void startIssue(cert.id, 'dns-01')} className={btnGhost}>{busyId === cert.id ? 'Working…' : 'Retry with DNS-01'}</button>
                               <button type="button" disabled={busyId === cert.id} onClick={() => void completeIssue(cert.id)} className={btnSecondary}>{busyId === cert.id ? 'Working…' : 'Complete issuance'}</button>
                             </>
                           )}

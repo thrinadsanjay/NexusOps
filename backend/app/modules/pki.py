@@ -12,7 +12,7 @@ from app.core.dependencies import get_current_user, require_permission
 from app.db import get_db
 from app.models import AcmeHttpChallenge, Certificate, CertificateAuthority
 from app.modules.acme_client import AcmeError, generate_rsa_pem
-from app.modules.acme_issue import complete_issue, dns_records_from_pending, load_pending, start_issue
+from app.modules.acme_issue import complete_issue, dns_records_from_pending, http_urls_from_pending, load_pending, start_issue
 from app.schemas import (
     AcmeIssueRequest,
     AcmeIssueResponse,
@@ -40,6 +40,7 @@ def _cert_read(cert: Certificate) -> CertificateRead:
             "has_private_key": bool(cert.private_key_pem),
             "has_certificate": bool(cert.certificate_pem),
             "acme_dns_records": dns_records_from_pending(pending) or None,
+            "acme_http_urls": http_urls_from_pending(pending) or None,
         }
     )
 

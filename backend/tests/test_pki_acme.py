@@ -4,7 +4,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import AcmeHttpChallenge
 from app.modules.acme_client import dns_challenge_name, names_for_order
-from app.modules.acme_issue import choose_challenge_type
+from app.modules.acme_issue import choose_challenge_type, http_urls_from_pending
 from app.modules.acme_client import AcmeError
 
 
@@ -22,7 +22,9 @@ def test_dns_challenge_name_strips_wildcard() -> None:
 
 
 def test_wildcard_requires_dns01() -> None:
-    assert choose_challenge_type(["vpn.example.com"], None) == "http-01"
+    assert choose_challenge_type(["vpn.example.com"], None) == "dns-01"
+    assert choose_challenge_type(["lab-prd-server01.sanjay-lab.online"], None) == "dns-01"
+    assert choose_challenge_type(["vpn.example.com"], "http-01") == "http-01"
     assert choose_challenge_type(["*.example.com"], None) == "dns-01"
     try:
         choose_challenge_type(["*.example.com"], "http-01")
@@ -30,6 +32,22 @@ def test_wildcard_requires_dns01() -> None:
         assert "Wildcard" in str(exc)
     else:
         raise AssertionError("expected AcmeError")
+
+
+def test_http_urls_from_pending() -> None:
+    urls = http_urls_from_pending(
+        {
+            "challenges": [
+                {
+                    "type": "http-01",
+                    "identifier": "lab-prd-server01.sanjay-lab.online",
+                    "token": "abc",
+                }
+            ]
+        }
+    )
+    assert urls == ["http://lab-prd-server01.sanjay-lab.online/.well-known/acme-challenge/abc"]
+    assert http_urls_from_pending({"challenges": [{"type": "dns-01", "identifier": "x", "token": "y"}]}) == []
 
 
 def _auth() -> dict[str, str]:

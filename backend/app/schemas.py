@@ -568,6 +568,7 @@ class CertificateRead(BaseModel):
     acme_challenge_type: str | None = None
     acme_error: str | None = None
     acme_dns_records: list[dict] | None = None
+    acme_http_urls: list[str] | None = None
     created_at: datetime
     updated_at: datetime
 
