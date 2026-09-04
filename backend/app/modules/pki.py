@@ -87,7 +87,15 @@ def update_ca(ca_id: int, payload: CertificateAuthorityUpdate, db: Session = Dep
     ca = db.query(CertificateAuthority).filter(CertificateAuthority.id == ca_id).first()
     if not ca:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CA not found")
-    for field, value in payload.model_dump(exclude_none=True).items():
+    data = {key: value for key, value in payload.model_dump(exclude_none=True).items() if value != ""}
+    if ca.kind == "acme":
+        provider = data.get("dns_provider", ca.dns_provider)
+        if provider not in {"manual", "internal", "cloudflare"}:
+            raise _acme_http("dns_provider must be manual, internal, or cloudflare")
+        token = data.get("dns_api_token", ca.dns_api_token)
+        if provider == "cloudflare" and not token:
+            raise _acme_http("Cloudflare DNS needs an API token with Zone.DNS edit")
+    for field, value in data.items():
         setattr(ca, field, value)
     db.commit()
     db.refresh(ca)

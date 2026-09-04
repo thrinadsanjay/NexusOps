@@ -144,9 +144,11 @@ export function PkiPanel() {
   const [caEmail, setCaEmail] = useState('')
   const [caDirectory, setCaDirectory] = useState('letsencrypt')
   const [caTos, setCaTos] = useState(false)
-  const [caDns, setCaDns] = useState('manual')
+  const [caDns, setCaDns] = useState('cloudflare')
   const [caToken, setCaToken] = useState('')
   const [caErr, setCaErr] = useState('')
+  const [editDns, setEditDns] = useState('manual')
+  const [editToken, setEditToken] = useState('')
 
   const [showCertForm, setShowCertForm] = useState(false)
   const [cCn, setCCn] = useState('')
@@ -175,6 +177,12 @@ export function PkiPanel() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (selectedCa) {
+      setEditDns(selectedCa.dns_provider || 'manual')
+      setEditToken('')
+    }
+  }, [selectedCa])
 
   const issuingCa = cas.find((c) => String(c.id) === cCaId)
   const isAcmeIssue = issuingCa?.kind === 'acme'
@@ -200,6 +208,25 @@ export function PkiPanel() {
     setCas((p) => [...p, data])
     setCaName(''); setCaCn(''); setCaExpiry(''); setCaEmail(''); setCaToken(''); setCaTos(false); setShowCaForm(false)
     if (data.kind === 'acme') setCCaId(String(data.id))
+  }
+
+  const handleUpdateCaDns = async (e: FormEvent) => {
+    e.preventDefault(); setCaErr('')
+    if (!selectedCa) return
+    if (editDns === 'cloudflare' && !editToken && !selectedCa.has_dns_credential) {
+      setCaErr('Paste a Cloudflare API token with Zone.DNS Edit on sanjay-lab.online')
+      return
+    }
+    const r = await fetch(`${API_BASE_URL}/api/v1/pki/cas/${selectedCa.id}`, {
+      method: 'PATCH', headers: authHeaders(),
+      body: JSON.stringify({ dns_provider: editDns, dns_api_token: editDns === 'cloudflare' && editToken ? editToken : undefined }),
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) { setCaErr(errDetail(data.detail, 'Failed to update CA')); return }
+    setCas((p) => p.map((row) => (row.id === data.id ? data : row)))
+    setSelectedCa(data)
+    setEditToken('')
+    setNotice(editDns === 'cloudflare' ? 'Cloudflare will publish the TXT records. Click Retry with DNS-01 on the pending cert.' : 'Saved DNS settings.')
   }
 
   const handleDeleteCa = async (id: number) => {
@@ -336,9 +363,9 @@ export function PkiPanel() {
                   <div>
                     <label className={lbl}>DNS challenge</label>
                     <select value={caDns} onChange={(e) => setCaDns(e.target.value)} className={input}>
-                      <option value="manual">I will publish TXT records</option>
-                      <option value="internal">Write TXT into NexusOps DNS</option>
-                      <option value="cloudflare">Cloudflare API</option>
+                      <option value="cloudflare">Cloudflare API — publishes TXT and finishes issuance</option>
+                      <option value="internal">Write TXT into NexusOps DNS (only if NexusOps is the public NS)</option>
+                      <option value="manual">I will publish TXT records myself</option>
                     </select>
                   </div>
                   {caDns === 'cloudflare' && (
@@ -377,6 +404,8 @@ export function PkiPanel() {
               <div className="mt-1 flex items-center gap-2">
                 <StatusPill s={ca.status} />
                 {ca.kind === 'acme' && <span className="rounded-md bg-indigo-500/15 px-2 py-0.5 text-[10px] text-indigo-300">ACME</span>}
+                {ca.kind === 'acme' && ca.dns_provider === 'cloudflare' && <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">{ca.has_dns_credential ? 'Cloudflare' : 'Cloudflare?'}</span>}
+                {ca.kind === 'acme' && ca.dns_provider === 'manual' && <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-300">manual TXT</span>}
                 {ca.expires_at && <ExpiryChip iso={ca.expires_at} />}
               </div>
             </button>
@@ -395,6 +424,32 @@ export function PkiPanel() {
 
           {notice && <Alert tone="success">{notice}</Alert>}
           {cErr && !showCertForm && <Alert>{cErr}</Alert>}
+          {caErr && selectedCa?.kind === 'acme' && !showCaForm && <Alert>{caErr}</Alert>}
+
+          {selectedCa?.kind === 'acme' && (
+            <form onSubmit={handleUpdateCaDns} className={`${card} grid gap-3 md:grid-cols-[1fr_1fr_auto]`}>
+              <div className="md:col-span-2 xl:col-span-3 text-sm text-slate-300">
+                Connect Cloudflare so NexusOps publishes the `_acme-challenge` TXT records and completes issuance. Manual DNS in the Cloudflare UI is not required.
+              </div>
+              <div>
+                <label className={lbl}>Public DNS</label>
+                <select value={editDns} onChange={(e) => setEditDns(e.target.value)} className={input}>
+                  <option value="cloudflare">Cloudflare API (automatic)</option>
+                  <option value="internal">NexusOps DNS</option>
+                  <option value="manual">I will publish TXT myself</option>
+                </select>
+              </div>
+              {editDns === 'cloudflare' && (
+                <div>
+                  <label className={lbl}>{selectedCa.has_dns_credential ? 'Replace API token' : 'Cloudflare API token'}</label>
+                  <input type="password" value={editToken} onChange={(e) => setEditToken(e.target.value)} placeholder={selectedCa.has_dns_credential ? '••••••••  (saved)' : 'Zone.DNS Edit on sanjay-lab.online'} className={input} />
+                </div>
+              )}
+              <div className="flex items-end">
+                <button type="submit" className={btnPrimary}>Save DNS automation</button>
+              </div>
+            </form>
+          )}
 
           {showCertForm && (
             <form onSubmit={handleCreateCert} className={`${card} grid gap-3 md:grid-cols-2 xl:grid-cols-3`}>

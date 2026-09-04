@@ -127,6 +127,23 @@ def test_letsencrypt_ca_requires_tos_and_email() -> None:
     assert "acme_account_key_pem" not in body
     assert "dns_api_token" not in body
 
+    missing_token = client.patch(
+        f"/api/v1/pki/cas/{body['id']}",
+        headers=headers,
+        json={"dns_provider": "cloudflare"},
+    )
+    assert missing_token.status_code == 400
+
+    updated = client.patch(
+        f"/api/v1/pki/cas/{body['id']}",
+        headers=headers,
+        json={"dns_provider": "cloudflare", "dns_api_token": "cf-test-token"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["dns_provider"] == "cloudflare"
+    assert updated.json()["has_dns_credential"] is True
+    assert "dns_api_token" not in updated.json()
+
 
 def test_http01_well_known_serves_key_authorization() -> None:
     token = "test-token-nexusops"
