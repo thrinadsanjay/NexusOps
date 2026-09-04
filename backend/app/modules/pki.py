@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_permission
 from app.db import get_db
 from app.models import AcmeHttpChallenge, Certificate, CertificateAuthority
-from app.modules.acme_client import AcmeError, generate_rsa_pem
+from app.modules.acme_client import AcmeError, generate_rsa_pem, names_for_order, validate_acme_names
 from app.modules.acme_issue import complete_issue, dns_records_from_pending, http_urls_from_pending, load_pending, start_issue
 from app.schemas import (
     AcmeIssueRequest,
@@ -141,6 +141,10 @@ def create_certificate(payload: CertificateCreate, db: Session = Depends(get_db)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CA not found")
     data = payload.model_dump()
     if ca and ca.kind == "acme":
+        try:
+            validate_acme_names(names_for_order(payload.common_name, payload.subject_alt_names))
+        except AcmeError as exc:
+            raise _acme_http(str(exc)) from exc
         data["status"] = "pending"
         if payload.common_name.startswith("*."):
             data["cert_type"] = "wildcard"

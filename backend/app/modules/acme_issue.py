@@ -19,6 +19,7 @@ from app.modules.acme_client import (
     names_for_order,
     parse_cert_expiry,
     split_pem_chain,
+    validate_acme_names,
 )
 
 CF_API = "https://api.cloudflare.com/client/v4"
@@ -90,6 +91,7 @@ def start_issue(db: Session, cert: Certificate, ca: CertificateAuthority, challe
     names = names_for_order(cert.common_name, cert.subject_alt_names)
     if not names:
         raise AcmeError("Certificate needs a DNS name")
+    validate_acme_names(names)
     selected_type = choose_challenge_type(names, challenge_type)
     if "*" in "".join(names) and selected_type != "dns-01":
         raise AcmeError("Wildcard names require DNS-01")

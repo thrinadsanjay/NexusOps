@@ -90,6 +90,161 @@ def names_for_order(common_name: str, sans: str | None) -> list[str]:
     return names + extra
 
 
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)"
+    r"(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
+
+_PRIVATE_SUFFIXES = frozenset(
+    {
+        "local",
+        "lan",
+        "internal",
+        "intranet",
+        "home",
+        "corp",
+        "private",
+        "localhost",
+        "invalid",
+        "test",
+        "example",
+        "onion",
+    }
+)
+
+# Used to catch truncated TLDs such as .onli / .onlin before Let's Encrypt.
+_PUBLIC_TLDS = frozenset(
+    {
+        "com",
+        "net",
+        "org",
+        "edu",
+        "gov",
+        "mil",
+        "int",
+        "info",
+        "biz",
+        "name",
+        "pro",
+        "xyz",
+        "online",
+        "site",
+        "website",
+        "space",
+        "tech",
+        "dev",
+        "app",
+        "cloud",
+        "io",
+        "ai",
+        "co",
+        "me",
+        "tv",
+        "cc",
+        "us",
+        "uk",
+        "ca",
+        "de",
+        "fr",
+        "au",
+        "in",
+        "nl",
+        "eu",
+        "ch",
+        "at",
+        "be",
+        "se",
+        "no",
+        "dk",
+        "fi",
+        "es",
+        "it",
+        "pl",
+        "jp",
+        "kr",
+        "cn",
+        "br",
+        "mx",
+        "nz",
+        "ie",
+        "za",
+        "sg",
+        "hk",
+        "shop",
+        "store",
+        "blog",
+        "live",
+        "world",
+        "digital",
+        "network",
+        "systems",
+        "host",
+        "email",
+        "mail",
+        "family",
+        "group",
+        "ltd",
+        "inc",
+        "solutions",
+        "services",
+        "software",
+        "studio",
+        "media",
+        "news",
+        "today",
+        "wiki",
+        "zone",
+        "one",
+        "link",
+        "page",
+        "fun",
+        "work",
+        "company",
+        "business",
+        "center",
+        "global",
+        "life",
+    }
+)
+
+
+def _host_of(name: str) -> str:
+    return name[2:] if name.startswith("*.") else name
+
+
+def _suggest_tld(tld: str) -> str | None:
+    if tld in _PUBLIC_TLDS or len(tld) < 3:
+        return None
+    hits = [cand for cand in _PUBLIC_TLDS if cand.startswith(tld) and len(cand) > len(tld)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def validate_acme_names(names: list[str]) -> None:
+    problems: list[str] = []
+    for name in names:
+        host = _host_of(name)
+        if name.startswith("*.") and not host:
+            problems.append(f"{name} is not a valid DNS name")
+            continue
+        if not _HOSTNAME_RE.match(host):
+            problems.append(f"{name} is not a valid DNS name")
+            continue
+        tld = host.rsplit(".", 1)[-1]
+        if tld in _PRIVATE_SUFFIXES:
+            problems.append(
+                f"{name} uses a private suffix (.{tld}). Let's Encrypt only signs public names such as host.sanjay-lab.online."
+            )
+            continue
+        suggested = _suggest_tld(tld)
+        if suggested:
+            fixed = f"{host[: -len(tld)]}{suggested}"
+            if name.startswith("*."):
+                fixed = "*." + fixed
+            problems.append(f'{name} is not a public domain. Did you mean "{fixed}"?')
+    if problems:
+        raise AcmeError(" ".join(problems) if len(problems) == 1 else "; ".join(problems))
+
+
 def dns_challenge_name(identifier: str) -> str:
     host = identifier[2:] if identifier.startswith("*.") else identifier
     return f"_acme-challenge.{host}"
@@ -206,7 +361,12 @@ class AcmeClient:
         payload = {"identifiers": [{"type": "dns", "value": name} for name in names]}
         body, response = self._signed_post(directory["newOrder"], payload)
         if response.status_code not in {201, 200}:
-            raise AcmeError(_problem(body, response))
+            detail = _problem(body, response)
+            if "public suffix" in detail.lower() or "invalid identifiers" in detail.lower():
+                raise AcmeError(
+                    f"{detail} Check the common name and SANs — they must be full public names such as host.sanjay-lab.online."
+                )
+            raise AcmeError(detail)
         order_url = response.headers.get("Location") or ""
         return self._order_from_body(order_url, body)
 

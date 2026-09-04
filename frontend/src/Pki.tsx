@@ -71,6 +71,28 @@ function StatusPill({ s }: { s: string }) {
 function TypePill({ t }: { t: string }) {
   return <span className={`rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${TYPE_BADGE[t] ?? 'bg-slate-700 text-slate-300'}`}>{t}</span>
 }
+const PRIVATE_TLDS = new Set(['local', 'lan', 'internal', 'intranet', 'home', 'corp', 'private', 'localhost', 'invalid', 'test', 'example'])
+const PUBLIC_TLDS = [
+  'com', 'net', 'org', 'edu', 'info', 'biz', 'xyz', 'online', 'site', 'tech', 'dev', 'app', 'cloud', 'io', 'ai', 'co', 'me', 'us', 'uk', 'ca', 'de',
+]
+function acmeNameHint(raw: string): string | null {
+  const name = raw.trim().toLowerCase().replace(/\.$/, '')
+  if (!name) return null
+  const host = name.startsWith('*.') ? name.slice(2) : name
+  const tld = host.split('.').pop() || ''
+  if (PRIVATE_TLDS.has(tld)) return `${name} uses a private suffix. Let's Encrypt needs a public name such as host.sanjay-lab.online.`
+  const match = PUBLIC_TLDS.filter((cand) => cand.startsWith(tld) && cand.length > tld.length && tld.length >= 3)
+  if (match.length === 1) return `${name} is not a public domain. Did you mean ${host.slice(0, -tld.length)}${match[0]}?`
+  return null
+}
+function acmeNamesHint(cn: string, sans: string): string | null {
+  for (const part of [cn, ...sans.split(',')]) {
+    const hint = acmeNameHint(part)
+    if (hint) return hint
+  }
+  return null
+}
+
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
@@ -210,6 +232,10 @@ export function PkiPanel() {
 
   const handleCreateCert = async (e: FormEvent) => {
     e.preventDefault(); setCErr(''); setNotice('')
+    if (isAcmeIssue) {
+      const hint = acmeNamesHint(cCn, cSans)
+      if (hint) { setCErr(hint); return }
+    }
     const res = await fetch(`${API_BASE_URL}/api/v1/pki/certificates`, {
       method: 'POST', headers: authHeaders(),
       body: JSON.stringify({
@@ -367,7 +393,7 @@ export function PkiPanel() {
 
           {showCertForm && (
             <form onSubmit={handleCreateCert} className={`${card} grid gap-3 md:grid-cols-2 xl:grid-cols-3`}>
-              <div><label className={lbl}>Common name *</label><input value={cCn} onChange={(e) => setCCn(e.target.value)} required placeholder="*.sanjay-lab.online" className={input} /></div>
+              <div><label className={lbl}>Common name *</label><input value={cCn} onChange={(e) => setCCn(e.target.value)} required placeholder="prod-tracker.sanjay-lab.online" className={input} /></div>
               <div><label className={lbl}>Type</label>
                 <select value={cType} onChange={(e) => setCType(e.target.value)} className={input}>
                   <option value="server">Server</option><option value="client">Client</option><option value="wildcard">Wildcard</option><option value="email">Email</option>
@@ -379,7 +405,7 @@ export function PkiPanel() {
                 </select>
               </div>
               <div><label className={lbl}>Issued to (hostname/service)</label><input value={cIssuedTo} onChange={(e) => setCIssuedTo(e.target.value)} className={input} /></div>
-              <div><label className={lbl}>SANs (comma-separated)</label><input value={cSans} onChange={(e) => setCSans(e.target.value)} placeholder="sanjay-lab.online" className={`${input} font-mono`} /></div>
+              <div><label className={lbl}>SANs (comma-separated)</label><input value={cSans} onChange={(e) => setCSans(e.target.value)} placeholder="prod-mongo.sanjay-lab.online" className={`${input} font-mono`} /></div>
               {isAcmeIssue ? (
                 <div>
                   <label className={lbl}>Let&apos;s Encrypt challenge</label>
@@ -398,7 +424,7 @@ export function PkiPanel() {
               <div><label className={lbl}>Notes</label><input value={cNotes} onChange={(e) => setCNotes(e.target.value)} className={input} /></div>
               {isAcmeIssue && (
                 <p className="md:col-span-2 xl:col-span-3 text-xs leading-5 text-slate-400">
-                  Publish the TXT records NexusOps shows at your public DNS (Cloudflare, registrar, etc.). Hostnames like lab-prd-server01.sanjay-lab.online cannot use HTTP-01 unless that name&apos;s port 80 reaches this NexusOps host. Then click Complete issuance.
+                  Type the full public hostname, including the TLD (host.sanjay-lab.online, not .onli). Publish the TXT records at your public DNS, then click Complete issuance. HTTP-01 only works if that name&apos;s port 80 reaches this NexusOps host.
                 </p>
               )}
               {cErr && <div className="md:col-span-2 xl:col-span-3"><Alert>{cErr}</Alert></div>}
@@ -434,7 +460,8 @@ export function PkiPanel() {
                     <tr key={cert.id} className="hover:bg-slate-800/50 align-top">
                       <td className="px-4 py-3">
                         <div className="font-mono font-semibold text-white">{cert.common_name}</div>
-                        {cert.acme_error && <p className="mt-1 max-w-xs text-[11px] text-rose-300">{cert.acme_error}</p>}
+                        {cert.subject_alt_names ? <div className="mt-0.5 break-all font-mono text-[11px] text-slate-400">{cert.subject_alt_names}</div> : null}
+                        {cert.acme_error && <p className="mt-1 max-w-xl text-[11px] text-rose-300">{cert.acme_error}</p>}
                         {cert.status === 'pending' && cert.acme_dns_records?.length ? (
                           <div className="mt-2 space-y-1 rounded-lg border border-white/10 bg-[#0b1220] p-2">
                             <p className="text-[10px] uppercase tracking-wide text-slate-500">Publish these TXT records, then Complete issuance</p>

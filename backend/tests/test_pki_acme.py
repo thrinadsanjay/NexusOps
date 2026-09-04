@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from app.main import app
 from app.models import AcmeHttpChallenge
-from app.modules.acme_client import dns_challenge_name, names_for_order
+from app.modules.acme_client import dns_challenge_name, names_for_order, validate_acme_names
 from app.modules.acme_issue import choose_challenge_type, http_urls_from_pending
 from app.modules.acme_client import AcmeError
 
@@ -30,6 +30,24 @@ def test_wildcard_requires_dns01() -> None:
         choose_challenge_type(["*.example.com"], "http-01")
     except AcmeError as exc:
         assert "Wildcard" in str(exc)
+    else:
+        raise AssertionError("expected AcmeError")
+
+
+def test_validate_acme_names_suggests_truncated_tld() -> None:
+    validate_acme_names(["prod-tracker.sanjay-lab.online", "lab-prd-server01.sanjay-lab.online"])
+    try:
+        validate_acme_names(["prod-mongo.sanjay-lab.onlin", "prod-tracker.sanjay-lab.onli"])
+    except AcmeError as exc:
+        text = str(exc)
+        assert "prod-mongo.sanjay-lab.online" in text
+        assert "prod-tracker.sanjay-lab.online" in text
+    else:
+        raise AssertionError("expected AcmeError")
+    try:
+        validate_acme_names(["nas.homelab.local"])
+    except AcmeError as exc:
+        assert "private suffix" in str(exc)
     else:
         raise AssertionError("expected AcmeError")
 
