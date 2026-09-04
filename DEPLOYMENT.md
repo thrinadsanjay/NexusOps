@@ -102,6 +102,32 @@ docker compose up -d --force-recreate frontend
 
 `VITE_API_BASE_URL` of `http://localhost:8000` is rewritten to same-origin so a browser on another machine hitting port 5173 still reaches the API via nginx `/api`.
 
+### OpenLDAP `File exists` / `startup/slapd failed with status 1`
+
+```
+failed to link ... [Errno 17] File exists: '.../startup/slapd'
+*** ERROR | /container/run/startup/slapd failed with status 1
+```
+
+The File-exists warnings are leftover osixia links after a crash restart. The usual root cause on Proxmox is `hostname --fqdn` failing (startup is `bash -e`) because the container hostname is not an FQDN. Compose sets `hostname: ldap.<LDAP_DOMAIN>` and a tmpfs on `/container/run`. Recreate:
+
+```bash
+git pull
+docker compose up -d --force-recreate openldap
+docker logs nexusops-ldap --tail 80
+```
+
+If an earlier crash left a half-written `slapd.d`, wipe **only** LDAP volumes:
+
+```bash
+docker compose stop openldap
+docker rm -f nexusops-ldap
+docker volume rm nexusops_ldap_data nexusops_ldap_config
+docker compose up -d openldap
+```
+
+Do not delete `nexusops_postgres_data` for this error.
+
 ### Postgres `Operation not permitted` on initdb
 
 Recent `postgres:*-alpine` images (Alpine 3.24) call syscalls that older Docker/`libseccomp` on RHEL lab hosts reject. Logs look like:
