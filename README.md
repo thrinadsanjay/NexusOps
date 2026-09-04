@@ -99,6 +99,16 @@ Do **not** clone `Development` onto a production host unless you intend to build
 docker compose up -d --force-recreate postgres
 ```
 
+**Backend `PermissionError: [Errno 13]` then uvloop `Cannot close a running event loop`**: the first error is the real one; uvloop noise is teardown. Common on Proxmox LXC. Compose now runs uvicorn with `--loop asyncio`, drops `NET_ADMIN`, and always points `DATABASE_URL` at the `postgres` service (not sqlite or localhost from a host `.env`). Recreate the API after `git pull`:
+
+```bash
+git pull
+docker compose up -d --force-recreate backend worker
+docker logs nexusops-backend --tail 80
+```
+
+If it still dies, the **first** `PermissionError` line (the file path) is the one that matters. Keep `postgres` healthy (`docker inspect --format '{{.State.Health.Status}}' nexusops-postgres`). A new backend image from CI is not required for the compose-side fix.
+
 **Postgres `postmaster.pid`: Operation not permitted** (older Docker/`libseccomp` + Alpine): compose uses `postgres:16` (Debian). Only if initdb never finished, wipe the empty volume once:
 
 ```bash
@@ -486,7 +496,7 @@ The backend image installs Python dependencies from public PyPI by default (`PIP
 
 - All passwords in `.env` are defaults for local development. Change them before any networked deployment.
 - LDAP bind passwords are stored in plaintext in the database. A secrets management integration is planned.
-- The `NET_RAW` / `NET_ADMIN` capabilities on the backend container are required for ICMP-based subnet scanning. Remove them if scanning is not needed.
+- The `NET_RAW` capability on the backend/worker containers is used for ICMP subnet scanning. `NET_ADMIN` is not added (it breaks startup on unprivileged Proxmox LXC). TCP fallback still works without `NET_RAW`.
 - JWT tokens expire after 60 minutes by default (`SESSION_TIMEOUT_MINUTES`).
 - On a new server, Postgres, Redis, and LDAP listen on loopback only unless you change `*_BIND`. Do not expose those ports publicly.
 

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,7 +17,44 @@ from app.modules.pki import router as pki_router
 from app.modules.ldap_module import router as ldap_router
 from app.core.bootstrap import ensure_admin_user, ensure_bundled_ldap_server
 from app.core.config import settings
-from app.db import create_database, get_db
+from app.db import create_database, get_db, redact_database_url, DATABASE_URL
+
+logger = logging.getLogger("nexusops")
+
+
+def bootstrap_app() -> None:
+    """Create tables and seed the first admin.
+
+    Uvicorn already has the event loop running when it imports ``app.main:app``.
+    Compose sets ``NEXUSOPS_SKIP_IMPORT_BOOTSTRAP`` so this runs from lifespan
+    instead. A PermissionError at import is handled while that loop is still
+    running, which uvloop reports as "Cannot close a running event loop".
+    """
+    logger.info("Bootstrapping database %s", redact_database_url(DATABASE_URL))
+    create_database()
+    db = next(get_db())
+    try:
+        ensure_admin_user(db)
+        ensure_bundled_ldap_server(db)
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    try:
+        bootstrap_app()
+    except Exception as exc:
+        path = getattr(exc, "filename", None)
+        logger.exception(
+            "Backend startup failed (%s)%s database=%s",
+            type(exc).__name__,
+            f" path={path}" if path else "",
+            redact_database_url(DATABASE_URL),
+        )
+        raise
+    yield
+
 
 app = FastAPI(
     title=settings.app_name,
@@ -21,6 +62,7 @@ app = FastAPI(
     description="Infrastructure Operations Platform",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -40,23 +82,17 @@ app.include_router(dashboard_router)
 app.include_router(pki_router)
 app.include_router(ldap_router)
 
-create_database()
-
-try:
-    db = next(get_db())
-    ensure_admin_user(db)
-    ensure_bundled_ldap_server(db)
-except Exception:  # pragma: no cover - platform bootstrap safety net
-    pass
-
-
-@app.on_event("startup")
-def startup() -> None:
-    create_database()
+# Pytest and `python -c "from app.main import app"` still need tables without a
+# lifespan. Compose sets NEXUSOPS_SKIP_IMPORT_BOOTSTRAP so uvicorn does not
+# touch the database while its event loop is already running.
+if os.getenv("NEXUSOPS_SKIP_IMPORT_BOOTSTRAP", "").lower() not in {"1", "true", "yes"}:
     try:
-        ensure_admin_user(next(get_db()))
-    except Exception:  # pragma: no cover - platform bootstrap safety net
-        pass
+        bootstrap_app()
+    except Exception:
+        logger.exception(
+            "Import-time bootstrap failed; lifespan will retry. database=%s",
+            redact_database_url(DATABASE_URL),
+        )
 
 
 @app.get("/health")

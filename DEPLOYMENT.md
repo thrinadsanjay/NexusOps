@@ -55,6 +55,34 @@ the data volume is fine. The `postgres` user cannot write `/var/run/postgresql` 
 docker compose up -d --force-recreate postgres
 ```
 
+### Backend `PermissionError` then uvloop `Cannot close a running event loop`
+
+Logs that look like this:
+
+```
+PermissionError: [Errno 13] Permission denied
+RuntimeError: this event loop is already running.
+RuntimeError: Cannot close a running event loop
+```
+
+are almost always Proxmox/LXC + uvicorn’s default **uvloop**, or the API trying to open **sqlite** (`./nexusops.db`) on a read-only overlay because `.env` had `DATABASE_URL=sqlite://...` or `localhost`. The uvloop frames are teardown; they hide the original path.
+
+Compose now:
+
+- starts uvicorn with `--loop asyncio --http h11` (no uvloop)
+- sets `DATABASE_URL` from `POSTGRES_*` to `postgres:5432` (ignores a host sqlite/localhost URL)
+- applies `seccomp:unconfined` / `apparmor:unconfined` to backend and worker
+- does not add `NET_ADMIN`
+
+After `git pull` on `main`:
+
+```bash
+docker compose up -d --force-recreate backend worker
+docker logs nexusops-backend --tail 80
+```
+
+Do not delete `nexusops_postgres_data` for this error.
+
 ### Postgres `Operation not permitted` on initdb
 
 Recent `postgres:*-alpine` images (Alpine 3.24) call syscalls that older Docker/`libseccomp` on RHEL lab hosts reject. Logs look like:
