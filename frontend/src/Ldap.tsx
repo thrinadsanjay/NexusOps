@@ -140,7 +140,7 @@ export function LdapPanel() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">LDAP Servers</h3>
-            <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-sky-500 to-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110">
+            <button onClick={() => setShowForm((p) => !p)} className="rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-3 py-1.5 text-xs font-semibold text-slate-950 transition hover:brightness-110">
               {showForm ? '✕' : '+ Server'}
             </button>
           </div>
@@ -162,7 +162,7 @@ export function LdapPanel() {
               <div><label className={lbl}>Attribute map (JSON)</label><textarea value={fAttrMap} onChange={(e) => setFAttrMap(e.target.value)} rows={3} className={`${input} font-mono text-xs`} /></div>
               <div><label className={lbl}>Notes</label><input value={fNotes} onChange={(e) => setFNotes(e.target.value)} className={input} /></div>
               {fErr && <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{fErr}</p>}
-              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add server</button>
+              <button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add server</button>
             </form>
           )}
 
@@ -203,7 +203,7 @@ export function LdapPanel() {
                 <button onClick={handleTest} disabled={testing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
                   {testing ? '⟳ Testing…' : '⟳ Test connection'}
                 </button>
-                <button onClick={handleSync} disabled={syncing} className="rounded-2xl bg-gradient-to-r from-sky-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-sky-500/20 transition hover:brightness-110 disabled:opacity-60">
+                <button onClick={handleSync} disabled={syncing} className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-indigo-500/20 transition hover:brightness-110 disabled:opacity-60">
                   {syncing ? '⟳ Syncing…' : '⟳ Sync users'}
                 </button>
               </div>
@@ -260,7 +260,7 @@ export function LdapPanel() {
                             <td className="px-3 py-3"><span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${SYNC_BADGE[log.status] ?? 'bg-slate-700 text-slate-300'}`}>{log.status}</span></td>
                             <td className="px-3 py-3 text-center text-white">{log.users_found}</td>
                             <td className="px-3 py-3 text-center text-emerald-400">{log.users_created}</td>
-                            <td className="px-3 py-3 text-center text-cyan-400">{log.users_updated}</td>
+                            <td className="px-3 py-3 text-center text-indigo-400">{log.users_updated}</td>
                             <td className="px-3 py-3 text-slate-400">{dur !== null ? `${dur}s` : '—'}</td>
                           </tr>
                         )

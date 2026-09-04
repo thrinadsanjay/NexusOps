@@ -57,7 +57,7 @@ const BUNDLED_TOOLS: Tool[] = [
 const CATEGORY_COLORS: Record<string, string> = {
   Identity:  'bg-sky-500/15 text-sky-300 border-sky-500/30',
   Developer: 'bg-violet-500/15 text-violet-300 border-violet-500/30',
-  Network:   'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+  Network:   'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
   Security:  'bg-rose-500/15 text-rose-300 border-rose-500/30',
   Monitoring:'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
 }
@@ -78,7 +78,7 @@ function ToolCard({ tool }: { tool: Tool }) {
       </div>
       <h4 className="mt-3 text-base font-semibold text-white">{tool.name}</h4>
       <p className="mt-1 text-sm text-slate-400">{tool.description}</p>
-      <div className="mt-4 flex items-center gap-1 text-[11px] text-slate-500 transition group-hover:text-cyan-400">
+      <div className="mt-4 flex items-center gap-1 text-[11px] text-slate-500 transition group-hover:text-indigo-400">
         <span className="font-mono">{tool.url}</span>
         <span>{tool.external ? '↗' : '→'}</span>
       </div>
@@ -125,7 +125,7 @@ export function ToolsPanel() {
   return (
     <section className="space-y-8">
       <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">NexusOps · Integrations</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-300">NexusOps · Integrations</p>
         <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Tools & Integrations</h2>
         <p className="mt-2 text-slate-300">Bundled services and operator shortcuts in one place.</p>
       </div>
@@ -197,7 +197,7 @@ export function ToolsPanel() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">These users can log in to NexusOps directly. LDAP auth is tried automatically if local auth fails. Change these in your <span className="text-cyan-300">.env</span> before production use.</p>
+        <p className="mt-3 text-[11px] text-slate-500">These users can log in to NexusOps directly. LDAP auth is tried automatically if local auth fails. Change these in your <span className="text-indigo-300">.env</span> before production use.</p>
       </div>
     </section>
   )
