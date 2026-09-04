@@ -23,7 +23,7 @@ Current Phase  : Phase 10 (LDAP Integration)
 - **New-server deploy** — One compose file (`docker-compose.yml`) plus `.env.example` and `./nexusops` are mirrored to `main`. `./nexusops install` installs Docker Engine for Debian/Proxmox or RHEL and starts the stack.
 - **LDAP in the product UI** — directory browse, bind test, user sync, and server registry live under **LDAP**. The old phpLDAPadmin sidecar (`nexusops-ldapadmin` on port 8082) is removed. Bundled **OpenLDAP** remains.
 - **Public PyPI builds** — the backend image installs Python packages from `https://pypi.org/simple` unless you override `PIP_INDEX_URL`.
-- **Frontend image** — built on `node:20-bookworm-slim` so Rollup’s glibc binary is present (`@rollup/rollup-linux-x64-gnu`). Alpine images often miss `@rollup/rollup-linux-x64-musl` because of an npm optional-deps bug.
+- **Frontend image** — SPA is built in CI (`node:20-bookworm-slim`) and **served by nginx**. The image does not run `vite` at container start (Vite/esbuild `ENOTCONN` on Proxmox LXC).
 
 ---
 
@@ -108,6 +108,17 @@ docker logs nexusops-backend --tail 80
 ```
 
 If it still dies, the **first** `PermissionError` line (the file path) is the one that matters. Keep `postgres` healthy (`docker inspect --format '{{.State.Health.Status}}' nexusops-postgres`). A new backend image from CI is not required for the compose-side fix.
+
+**Frontend `Error: read ENOTCONN` / `ensureServiceIsRunning` (esbuild/vite)**: the published UI image used to run `vite` (dev server) at start. Esbuild then spawns a helper; on Proxmox LXC that socket is `ENOTCONN` and the container loops. The image now **builds the SPA in CI and serves it with nginx**. After this lands on `main` and GHCR has the new `nexusops-frontend:latest`:
+
+```bash
+git pull
+docker compose pull frontend
+docker compose up -d --force-recreate frontend
+docker logs nexusops-frontend --tail 40
+```
+
+`localhost` in `VITE_API_BASE_URL` is treated as same-origin: the UI calls `/api` on port 5173 and nginx proxies to the backend. Set `PUBLIC_HOST` to the host DNS/IP so CORS and a non-localhost API URL still match how you open the browser.
 
 **Postgres `postmaster.pid`: Operation not permitted** (older Docker/`libseccomp` + Alpine): compose uses `postgres:16` (Debian). Only if initdb never finished, wipe the empty volume once:
 
@@ -356,7 +367,7 @@ graph TD
 | Container | Image / Build | Purpose | Port(s) | Persistence |
 |---|---|---|---|---|
 | `nexusops-backend` | `ghcr.io/thrinadsanjay/nexusops-backend` (or local build) | FastAPI REST API, Alembic migrations, bootstrap | `8000` | PostgreSQL |
-| `nexusops-frontend` | `ghcr.io/thrinadsanjay/nexusops-frontend` (or local build) | React + Vite SPA | `5173` | None |
+| `nexusops-frontend` | `ghcr.io/thrinadsanjay/nexusops-frontend` (or local build) | React SPA (nginx) | `5173` | None |
 | `nexusops-worker` | same backend image | Celery background worker (subnet scans, sync) | — | Redis + PostgreSQL |
 | `nexusops-postgres` | `postgres:16` | Primary application database | `5432` | `postgres_data` volume |
 | `nexusops-redis` | `redis:7-alpine` | Celery broker and result backend | `6379` | `redis_data` volume |
@@ -441,7 +452,7 @@ Key `.env` variables:
 | `PUBLIC_HOST` | `localhost` | DNS name or IP browsers use to reach this host (server compose) |
 | `APP_BASE_URL` | `http://localhost:8000` | Public API URL |
 | `FRONTEND_URL` | `http://localhost:5173` | Public UI URL (CORS allow-origin) |
-| `VITE_API_BASE_URL` | `http://localhost:8000` | API URL the browser calls |
+| `VITE_API_BASE_URL` | `http://localhost:8000` | API URL the browser calls. `localhost` / empty uses the UI origin (`/api` proxied to the backend). |
 | `DATABASE_URL` | `postgresql+psycopg2://nexusops:change-me@postgres:5432/nexusops` | PostgreSQL connection (must match `POSTGRES_*`) |
 | `POSTGRES_PASSWORD` | `change-me` | PostgreSQL password |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection |
