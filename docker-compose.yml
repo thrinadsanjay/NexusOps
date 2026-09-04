@@ -8,6 +8,14 @@
 
 name: nexusops
 
+# Proxmox VE / unprivileged LXC: AppArmor and seccomp otherwise deny
+# eventfd/epoll (uvloop) and overlay writes. Applied to API and worker.
+x-pve-compat: &pve-compat
+  security_opt:
+    - seccomp:unconfined
+    - apparmor:unconfined
+  shm_size: 64mb
+
 x-backend-environment: &backend-environment
   APP_NAME: ${APP_NAME:-nexusops}
   APP_ENV: ${APP_ENV:-production}
@@ -16,7 +24,8 @@ x-backend-environment: &backend-environment
   APP_PORT: "8000"
   APP_BASE_URL: ${APP_BASE_URL:-http://${PUBLIC_HOST:-localhost}:${BACKEND_PORT:-8000}}
   FRONTEND_URL: ${FRONTEND_URL:-http://${PUBLIC_HOST:-localhost}:${FRONTEND_PORT:-5173}}
-  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://${POSTGRES_USER:-nexusops}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-nexusops}}
+  # Always the compose DNS name, not host DATABASE_URL (often sqlite or localhost).
+  DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-nexusops}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-nexusops}
   POSTGRES_HOST: postgres
   POSTGRES_PORT: "5432"
   POSTGRES_DB: ${POSTGRES_DB:-nexusops}
@@ -38,6 +47,8 @@ x-backend-environment: &backend-environment
   LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
   LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
   PYTHONPATH: /app
+  # Import-time DB init races uvicorn's already-running loop (uvloop teardown).
+  NEXUSOPS_SKIP_IMPORT_BOOTSTRAP: "1"
 
 services:
   postgres:
@@ -90,6 +101,7 @@ services:
       retries: 10
 
   backend:
+    <<: *pve-compat
     image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
     build:
       context: ./backend
@@ -104,15 +116,20 @@ services:
       <<: *backend-environment
     ports:
       - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8000}:8000"
+    tmpfs:
+      - /tmp:mode=01777
     cap_add:
+      # ICMP ping for subnet scan. NET_ADMIN is omitted: on Proxmox LXC it
+      # often yields PermissionError at process start without helping ping.
       - NET_RAW
-      - NET_ADMIN
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: sh -c "PYTHONPATH=/app alembic upgrade head && PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # --loop asyncio: uvloop on Proxmox/LXC raises PermissionError, then
+    # "Cannot close a running event loop" while uvicorn tears down.
+    command: sh -c "PYTHONPATH=/app alembic upgrade head && PYTHONPATH=/app uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop asyncio --http h11"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 15s
@@ -120,6 +137,7 @@ services:
       retries: 10
 
   worker:
+    <<: *pve-compat
     image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
     build:
       context: ./backend
@@ -132,6 +150,10 @@ services:
     pull_policy: ${PULL_POLICY:-missing}
     environment:
       <<: *backend-environment
+    tmpfs:
+      - /tmp:mode=01777
+    cap_add:
+      - NET_RAW
     depends_on:
       postgres:
         condition: service_healthy

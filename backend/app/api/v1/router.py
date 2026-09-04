@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.bootstrap import ensure_admin_user
 from app.core.dependencies import get_current_user, require_permission
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import get_db
@@ -72,12 +71,6 @@ def _provision_ldap_user(username: str, db: Session) -> User | None:
         return new_user
     except Exception:
         return None
-
-
-@router.on_event("startup")
-def startup() -> None:
-    db = next(get_db())
-    ensure_admin_user(db)
 
 
 @router.post("/auth/login", response_model=AuthToken)

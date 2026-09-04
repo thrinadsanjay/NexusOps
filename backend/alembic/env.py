@@ -5,12 +5,12 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.core.config import settings
-from app.db import Base
+from app.db import Base, DATABASE_URL
 import app.models  # noqa: F401 – registers all models with Base metadata
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Alembic ConfigParser treats % as interpolation; quote_plus passwords use %.
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
