@@ -120,7 +120,7 @@ docker logs nexusops-frontend --tail 40
 
 `localhost` in `VITE_API_BASE_URL` is treated as same-origin: the UI calls `/api` on port 5173 and nginx proxies to the backend. Set `PUBLIC_HOST` to the host DNS/IP so CORS and a non-localhost API URL still match how you open the browser.
 
-**OpenLDAP `File exists` then `startup/slapd failed with status 1`**: the File-exists lines are leftover `/container/run` links from a restart loop. The real failure is often `hostname --fqdn` (osixia’s startup is `bash -e`) when the container has no FQDN. Compose now sets `hostname: ldap.<LDAP_DOMAIN>` and a tmpfs on `/container/run`. Recreate LDAP (keep volumes first):
+**OpenLDAP `File exists` then `startup/slapd failed with status 1`**: leftover `/container/run` links after a crash. The usual root cause is `hostname --fqdn` (osixia is `bash -e`) when the container has no FQDN. Compose sets `hostname: ldap.<LDAP_DOMAIN>`. Do **not** tmpfs `/container/run` (on Proxmox that mount is often `noexec`, so osixia finds no slapd process and runs `bash` then exits 0). Recreate LDAP (keep volumes first):
 
 ```bash
 git pull

@@ -109,7 +109,7 @@ failed to link ... [Errno 17] File exists: '.../startup/slapd'
 *** ERROR | /container/run/startup/slapd failed with status 1
 ```
 
-The File-exists warnings are leftover osixia links after a crash restart. The usual root cause on Proxmox is `hostname --fqdn` failing (startup is `bash -e`) because the container hostname is not an FQDN. Compose sets `hostname: ldap.<LDAP_DOMAIN>` and a tmpfs on `/container/run`. Recreate:
+The File-exists warnings are leftover osixia links after a crash restart. The usual root cause on Proxmox is `hostname --fqdn` failing (startup is `bash -e`) because the container hostname is not an FQDN. Compose sets `hostname: ldap.<LDAP_DOMAIN>`. Do not tmpfs `/container/run` — on Proxmox that filesystem is often `noexec`, so `process.sh` is skipped and the image runs `bash` then exits 0 (`Running bash... bash exited with status 0`). Recreate:
 
 ```bash
 git pull
