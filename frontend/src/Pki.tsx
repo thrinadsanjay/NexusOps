@@ -293,7 +293,7 @@ export function PkiPanel() {
               {caKind === 'acme' ? (
                 <>
                   <div><label className={lbl}>Display name</label><input value={caName} onChange={(e) => setCaName(e.target.value)} placeholder="Let's Encrypt" className={input} /></div>
-                  <div><label className={lbl}>Account email *</label><input type="email" value={caEmail} onChange={(e) => setCaEmail(e.target.value)} required placeholder="you@example.com" className={input} /></div>
+                  <div><label className={lbl}>Account email *</label><input type="email" value={caEmail} onChange={(e) => setCaEmail(e.target.value)} required placeholder="admin@sanjay-lab.online" className={input} /></div>
                   <div>
                     <label className={lbl}>Environment</label>
                     <select value={caDirectory} onChange={(e) => setCaDirectory(e.target.value)} className={input}>
