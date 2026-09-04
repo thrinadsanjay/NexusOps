@@ -4,7 +4,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import AcmeHttpChallenge
 from app.modules.acme_client import dns_challenge_name, names_for_order, validate_acme_names
-from app.modules.acme_issue import choose_challenge_type, http_urls_from_pending
+from app.modules.acme_issue import assert_public_dns01, choose_challenge_type, http_urls_from_pending
 from app.modules.acme_client import AcmeError
 
 
@@ -50,6 +50,27 @@ def test_validate_acme_names_suggests_truncated_tld() -> None:
         assert "private suffix" in str(exc)
     else:
         raise AssertionError("expected AcmeError")
+
+
+def test_assert_public_dns01_requires_visible_txt() -> None:
+    pending = {
+        "challenges": [
+            {
+                "type": "dns-01",
+                "record_name": "_acme-challenge.prod-tracker.sanjay-lab.online",
+                "record_value": "abc123",
+            }
+        ]
+    }
+    assert_public_dns01(pending, lookup=lambda _name: ["abc123"])
+    try:
+        assert_public_dns01(pending, lookup=lambda _name: [])
+    except AcmeError as exc:
+        assert "Public DNS" in str(exc)
+        assert "_acme-challenge.prod-tracker.sanjay-lab.online" in str(exc)
+    else:
+        raise AssertionError("expected AcmeError")
+    assert_public_dns01(pending, lookup=lambda _name: (_ for _ in ()).throw(RuntimeError("offline")))
 
 
 def test_http_urls_from_pending() -> None:

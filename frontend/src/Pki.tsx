@@ -108,6 +108,10 @@ const input = fieldClass
 const lbl = labelClass
 const card = cardClass
 
+function copyText(value: string) {
+  return navigator.clipboard.writeText(value)
+}
+
 async function downloadPem(id: number, part: string, filename: string) {
   const r = await fetch(`${API_BASE_URL}/api/v1/pki/certificates/${id}/pem?part=${part}`, { headers: authHeaders() })
   if (!r.ok) throw new Error(errDetail((await r.json().catch(() => ({}))).detail, 'Download failed'))
@@ -156,6 +160,7 @@ export function PkiPanel() {
   const [cNotes, setCNotes] = useState('')
   const [cChallenge, setCChallenge] = useState('dns-01')
   const [cErr, setCErr] = useState('')
+  const [copied, setCopied] = useState('')
 
   const load = useCallback(() => {
     Promise.all([
@@ -463,11 +468,20 @@ export function PkiPanel() {
                         {cert.subject_alt_names ? <div className="mt-0.5 break-all font-mono text-[11px] text-slate-400">{cert.subject_alt_names}</div> : null}
                         {cert.acme_error && <p className="mt-1 max-w-xl text-[11px] text-rose-300">{cert.acme_error}</p>}
                         {cert.status === 'pending' && cert.acme_dns_records?.length ? (
-                          <div className="mt-2 space-y-1 rounded-lg border border-white/10 bg-[#0b1220] p-2">
-                            <p className="text-[10px] uppercase tracking-wide text-slate-500">Publish these TXT records, then Complete issuance</p>
+                          <div className="mt-2 space-y-2 rounded-lg border border-white/10 bg-[#0b1220] p-2">
+                            <p className="text-[10px] uppercase tracking-wide text-slate-500">Add these TXT records on public DNS (Cloudflare / registrar), wait, then Complete. Do not Retry after publishing.</p>
                             {cert.acme_dns_records.map((rec) => (
                               <div key={rec.name + rec.value} className="text-[11px] text-slate-300">
-                                <div className="font-mono text-indigo-200">{rec.name}</div>
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="font-mono text-indigo-200">{rec.name}</div>
+                                  <button
+                                    type="button"
+                                    className={btnGhost + ' shrink-0 px-2 py-0.5 text-[10px]'}
+                                    onClick={() => void copyText(`${rec.name} TXT ${rec.value}`).then(() => { setCopied(rec.name); window.setTimeout(() => setCopied(''), 1500) })}
+                                  >
+                                    {copied === rec.name ? 'Copied' : 'Copy'}
+                                  </button>
+                                </div>
                                 <div className="break-all font-mono text-slate-400">TXT {rec.value}</div>
                               </div>
                             ))}

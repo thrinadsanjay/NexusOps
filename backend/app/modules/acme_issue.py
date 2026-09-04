@@ -23,6 +23,7 @@ from app.modules.acme_client import (
 )
 
 CF_API = "https://api.cloudflare.com/client/v4"
+DOH_URL = "https://cloudflare-dns.com/dns-query"
 
 
 def pending_payload(challenges: list[AcmeChallenge], extra: dict | None = None) -> str:
@@ -67,6 +68,50 @@ def http_urls_from_pending(pending: dict) -> list[str]:
         for item in pending.get("challenges") or []
         if item.get("type") == "http-01" and item.get("identifier") and item.get("token")
     ]
+
+
+def lookup_public_txt(name: str) -> list[str]:
+    response = httpx.get(
+        DOH_URL,
+        params={"name": name.rstrip("."), "type": "TXT"},
+        headers={"Accept": "application/dns-json"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    body = response.json()
+    values: list[str] = []
+    for row in body.get("Answer") or []:
+        if int(row.get("type") or 0) != 16:
+            continue
+        raw = str(row.get("data") or "").strip()
+        if raw.startswith('"') and raw.endswith('"'):
+            raw = raw[1:-1]
+        values.append(raw.replace('" "', ""))
+    return values
+
+
+def assert_public_dns01(pending: dict, lookup=lookup_public_txt) -> None:
+    records = dns_records_from_pending(pending)
+    if not records:
+        return
+    missing: list[str] = []
+    checked = 0
+    for rec in records:
+        try:
+            seen = lookup(rec["name"])
+        except Exception:
+            continue
+        checked += 1
+        if rec["value"] not in seen:
+            missing.append(rec["name"])
+    if checked and missing:
+        names = ", ".join(missing)
+        raise AcmeError(
+            f"Public DNS does not have the required TXT records yet ({names}). "
+            "Add them at the registrar or Cloudflare for this domain (not only in NexusOps DNS), "
+            "wait until they resolve, then click Complete issuance. "
+            "Do not click Retry after publishing — that creates new tokens."
+        )
 
 
 def choose_challenge_type(names: list[str], requested: str | None) -> str:
@@ -142,6 +187,14 @@ def complete_issue(db: Session, cert: Certificate, ca: CertificateAuthority, wai
 
     names = names_for_order(cert.common_name, cert.subject_alt_names)
     with AcmeClient(directory_url(ca.acme_directory), ca.acme_account_key_pem or "", ca.acme_account_url) as client:
+        current = client.load_order(cert.acme_order_url)
+        if current.status == "invalid":
+            raise AcmeError(
+                "This Let's Encrypt order already failed. Click Retry with DNS-01, "
+                "publish the new TXT records on public DNS, wait, then Complete issuance."
+            )
+        if current.status not in {"ready", "valid"}:
+            assert_public_dns01(pending)
         for item in pending["challenges"]:
             client.answer_challenge(item["url"])
         order = client.wait_order(cert.acme_order_url)
@@ -335,7 +388,7 @@ def _pending_result(cert: Certificate, started: bool, message: str | None = None
         default = (
             "Publish these TXT records on the public DNS for the domain, wait a minute, then click Complete issuance."
             if not records
-            else "Publish the TXT records below at your DNS host (Cloudflare, registrar, etc.), wait for them to resolve, then click Complete issuance."
+            else "Add the TXT records below at the public DNS host for this domain (Cloudflare or registrar — not only NexusOps DNS). Wait until they resolve, then Complete issuance. Do not Retry after publishing."
         )
     else:
         default = "Let's Encrypt will fetch the HTTP challenge on port 80. Point the hostname at this NexusOps host, or switch to DNS-01."
