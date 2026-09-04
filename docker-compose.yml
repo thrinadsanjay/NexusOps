@@ -188,8 +188,13 @@ services:
       retries: 10
 
   openldap:
+    # osixia/openldap uses bash -e; `hostname --fqdn` exiting 1 (no FQDN) aborts
+    # slapd startup. Restart then hits File exists on leftover /container/run links.
+    <<: *pve-compat
     image: osixia/openldap:1.5.0
     container_name: nexusops-ldap
+    hostname: ldap.${LDAP_DOMAIN:-homelab.local}
+    domainname: ${LDAP_DOMAIN:-homelab.local}
     restart: unless-stopped
     environment:
       LDAP_ORGANISATION: ${LDAP_ORGANISATION:-NexusOps Homelab}
@@ -201,12 +206,24 @@ services:
       LDAP_READONLY_USER_USERNAME: ${LDAP_READONLY_USER_USERNAME:-readonly}
       LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_USER_PASSWORD:-readonly}
       LDAP_TLS: "false"
+      LDAP_TLS_ENFORCE: "false"
+      LDAP_TLS_VERIFY_CLIENT: "never"
+      LDAP_NOFILE: "1024"
+    tmpfs:
+      - /container/run
+      - /tmp
+      - /var/run/slapd
     ports:
       - "${LDAP_BIND:-127.0.0.1}:${LDAP_PORT:-389}:389"
     volumes:
       - ldap_data:/var/lib/ldap:Z
       - ldap_config:/etc/ldap/slapd.d:Z
-    command: "--loglevel warning"
+    command: ["--copy-service", "--loglevel", "info"]
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://127.0.0.1:389 -b ${LDAP_BASE_DN:-dc=homelab,dc=local} -s base >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:
