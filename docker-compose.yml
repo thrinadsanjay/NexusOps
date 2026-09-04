@@ -189,7 +189,8 @@ services:
 
   openldap:
     # osixia/openldap uses bash -e; `hostname --fqdn` exiting 1 (no FQDN) aborts
-    # slapd startup. Restart then hits File exists on leftover /container/run links.
+    # slapd. Do not tmpfs /container/run: on Proxmox that mount is often noexec,
+    # so process.sh is skipped and the image runs bash then exits 0.
     <<: *pve-compat
     image: osixia/openldap:1.5.0
     container_name: nexusops-ldap
@@ -210,7 +211,6 @@ services:
       LDAP_TLS_VERIFY_CLIENT: "never"
       LDAP_NOFILE: "1024"
     tmpfs:
-      - /container/run
       - /tmp
       - /var/run/slapd
     ports:
