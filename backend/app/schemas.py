@@ -484,6 +484,12 @@ class CertificateAuthorityCreate(BaseModel):
     status: str = "active"
     expires_at: datetime | None = None
     notes: str | None = None
+    kind: str = "internal"
+    acme_directory: str | None = None
+    acme_email: str | None = None
+    acme_tos_agreed: bool = False
+    dns_provider: str = "manual"
+    dns_api_token: str | None = None
 
 
 class CertificateAuthorityUpdate(BaseModel):
@@ -491,6 +497,10 @@ class CertificateAuthorityUpdate(BaseModel):
     status: str | None = None
     notes: str | None = None
     expires_at: datetime | None = None
+    acme_email: str | None = None
+    acme_tos_agreed: bool | None = None
+    dns_provider: str | None = None
+    dns_api_token: str | None = None
 
 
 class CertificateAuthorityRead(BaseModel):
@@ -503,6 +513,12 @@ class CertificateAuthorityRead(BaseModel):
     status: str
     expires_at: datetime | None = None
     notes: str | None = None
+    kind: str = "internal"
+    acme_directory: str | None = None
+    acme_email: str | None = None
+    acme_tos_agreed: bool = False
+    dns_provider: str = "manual"
+    has_dns_credential: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -547,8 +563,25 @@ class CertificateRead(BaseModel):
     revoked_at: datetime | None = None
     notes: str | None = None
     host_id: int | None = None
+    has_private_key: bool = False
+    has_certificate: bool = False
+    acme_challenge_type: str | None = None
+    acme_error: str | None = None
+    acme_dns_records: list[dict] | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AcmeIssueRequest(BaseModel):
+    challenge_type: str | None = None
+
+
+class AcmeIssueResponse(BaseModel):
+    certificate: CertificateRead
+    status: str
+    message: str
+    dns_records: list[dict] = []
+    http_urls: list[str] = []
 
 
 # ---------------------------------------------------------------------------

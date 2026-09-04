@@ -369,6 +369,15 @@ class CertificateAuthority(Base):
     status: Mapped[str] = Column(String(40), default="active", nullable=False)
     expires_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
     notes: Mapped[str | None] = Column(Text, nullable=True)
+    # internal = metadata only; acme = Let's Encrypt (or other ACME) issuance
+    kind: Mapped[str] = Column(String(40), default="internal", nullable=False)
+    acme_directory: Mapped[str | None] = Column(String(40), nullable=True)  # letsencrypt | letsencrypt-staging
+    acme_email: Mapped[str | None] = Column(String(255), nullable=True)
+    acme_account_key_pem: Mapped[str | None] = Column(Text, nullable=True)
+    acme_account_url: Mapped[str | None] = Column(String(500), nullable=True)
+    acme_tos_agreed: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    dns_provider: Mapped[str] = Column(String(40), default="manual", nullable=False)  # manual | internal | cloudflare
+    dns_api_token: Mapped[str | None] = Column(Text, nullable=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -393,10 +402,27 @@ class Certificate(Base):
     notes: Mapped[str | None] = Column(Text, nullable=True)
     # link to inventory host
     host_id: Mapped[int | None] = Column(ForeignKey("hosts.id"), nullable=True, index=True)
+    private_key_pem: Mapped[str | None] = Column(Text, nullable=True)
+    certificate_pem: Mapped[str | None] = Column(Text, nullable=True)
+    chain_pem: Mapped[str | None] = Column(Text, nullable=True)
+    acme_order_url: Mapped[str | None] = Column(String(500), nullable=True)
+    acme_challenge_type: Mapped[str | None] = Column(String(40), nullable=True)
+    acme_error: Mapped[str | None] = Column(Text, nullable=True)
+    acme_pending_json: Mapped[str | None] = Column(Text, nullable=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     ca: Mapped[CertificateAuthority | None] = relationship("CertificateAuthority", back_populates="certificates")
+
+
+class AcmeHttpChallenge(Base):
+    __tablename__ = "acme_http_challenges"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    token: Mapped[str] = Column(String(255), unique=True, nullable=False, index=True)
+    key_authorization: Mapped[str] = Column(String(500), nullable=False)
+    certificate_id: Mapped[int | None] = Column(ForeignKey("certificates.id"), nullable=True, index=True)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from app.api.v1.router import router as v1_router
 from app.modules.ipam import router as ipam_router
@@ -81,6 +82,13 @@ app.include_router(dhcp_router)
 app.include_router(dashboard_router)
 app.include_router(pki_router)
 app.include_router(ldap_router)
+
+
+@app.get("/.well-known/acme-challenge/{token}")
+def letsencrypt_http01(token: str, db: Session = Depends(get_db)) -> Response:
+    from app.modules.pki import http01_response
+
+    return http01_response(token, db)
 
 # Pytest and `python -c "from app.main import app"` still need tables without a
 # lifespan. Compose sets NEXUSOPS_SKIP_IMPORT_BOOTSTRAP so uvicorn does not
