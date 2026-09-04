@@ -9,6 +9,7 @@ import { DhcpPanel } from './Dhcp'
 import { PkiPanel } from './Pki'
 import { LdapPanel } from './Ldap'
 import { ToolsPanel } from './Tools'
+import { Badge, KpiCard, PageHeader, btnSecondary, cardClass, fieldClass, tableWrapClass } from './ui'
 
 type AuthUser = {
   id: number
@@ -397,7 +398,7 @@ function Login({ onSubmit, loading, error }: LoginProps) {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[#111827] shadow-2xl md:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid w-full max-w-5xl overflow-hidden rounded-xl border border-white/10 bg-[#151b24] md:grid-cols-[1.05fr_0.95fr]">
         <div className="bg-[#0b1220] p-8 md:p-10">
           <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300">
             Secure access
@@ -456,7 +457,7 @@ function Login({ onSubmit, loading, error }: LoginProps) {
               />
             </div>
 
-            {error && <p className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-200">{error}</p>}
+            {error && <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2.5 text-sm text-rose-200">{error}</p>}
 
             <button
               type="submit"
@@ -499,91 +500,88 @@ function Overview({ user }: { user: AuthUser }) {
   }, [loadStats])
 
   const moduleCards = [
-    { title: 'Network / IPAM', to: '/ipam', icon: 'N', desc: 'Subnets, VLANs, IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-indigo-500/15 to-transparent border-indigo-500/20', badge: 'bg-indigo-500/15 text-indigo-300' },
-    { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
-    { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
-    { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
-    { title: 'PKI', to: '/pki', icon: 'P', desc: 'Certificates and CAs', stat: stats ? `${(stats as any).pki?.active_certs ?? 0} active · ${(stats as any).pki?.expiring_30d ?? 0} expiring` : '—', panel: 'from-rose-500/20 to-rose-500/5 border-rose-500/30', badge: 'bg-rose-500/15 text-rose-300' },
-    { title: 'LDAP', to: '/ldap', icon: 'L', desc: 'Directory integration & user sync', stat: 'Browse · Sync · Import', panel: 'from-sky-500/20 to-sky-500/5 border-sky-500/30', badge: 'bg-sky-500/15 text-sky-300' },
-    { title: 'Users', to: '/users', icon: 'U', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—', panel: 'from-violet-500/20 to-violet-500/5 border-violet-500/30', badge: 'bg-violet-500/15 text-violet-300' },
-    { title: 'Settings', to: '/settings', icon: 'S', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—', panel: 'from-slate-700/40 to-slate-800/20 border-slate-700/60', badge: 'bg-slate-700 text-slate-300' },
+    { title: 'Network', to: '/ipam', desc: 'Subnets, VLANs, and IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—' },
+    { title: 'Inventory', to: '/inventory', desc: 'Hosts, groups, and tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—' },
+    { title: 'DNS', to: '/dns', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—' },
+    { title: 'DHCP', to: '/dhcp', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—' },
+    { title: 'Certificates', to: '/pki', desc: 'CAs and issued certificates', stat: stats ? `${(stats as any).pki?.active_certs ?? 0} active · ${(stats as any).pki?.expiring_30d ?? 0} expiring` : '—' },
+    { title: 'Directory', to: '/ldap', desc: 'LDAP browse, test, and sync', stat: 'Identity integration' },
+    { title: 'Users', to: '/users', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—' },
+    { title: 'Settings', to: '/settings', desc: 'Platform config and API tokens', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—' },
   ] as const
 
-  const kpis = stats ? [
-    { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active`, badge: 'bg-emerald-500/15 text-emerald-300' },
-    { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned`, badge: 'bg-indigo-500/15 text-indigo-300' },
-    { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones`, badge: 'bg-indigo-500/15 text-indigo-300' },
-    { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static`, badge: 'bg-amber-500/15 text-amber-300' },
-  ] : []
+  const kpis = stats
+    ? [
+        { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active` },
+        { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned` },
+        { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones` },
+        { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static` },
+      ]
+    : []
 
   return (
     <section className="space-y-6">
-      {/* hero */}
-      <div className="rounded-[30px] border border-slate-800/80 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-300">Operations overview</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white md:text-4xl">Welcome, {greeting}</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-              All systems online
-            </div>
-            <button onClick={loadStats} className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 transition hover:bg-slate-800">⟳ Refresh</button>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={`Welcome, ${greeting}`}
+        description="Operations snapshot across network, identity, and platform services."
+        actions={
+          <>
+            <span className="inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Online
+            </span>
+            <button onClick={loadStats} className={btnSecondary}>
+              Refresh
+            </button>
+          </>
+        }
+      />
 
-      {/* live KPI strip */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {stats === null ? (
-          [0,1,2,3].map((i) => <div key={i} className="h-24 animate-pulse rounded-[24px] border border-slate-800 bg-slate-900/80" />)
-        ) : kpis.map(({ label, value, sub, badge }) => (
-          <div key={label} className="rounded-[24px] border border-slate-800 bg-slate-900/80 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
-            <div className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${badge}`}>{label}</div>
-            <div className="mt-4 text-3xl font-bold text-white">{value}</div>
-            <div className="mt-1 text-xs text-slate-400">{sub}</div>
-          </div>
-        ))}
+        {stats === null
+          ? [0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-white/10 bg-[#151b24]" />)
+          : kpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
       </div>
 
-      {/* module cards + audit feed */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {moduleCards.map(({ title, to, icon, desc, stat, panel, badge }) => (
-            <Link key={title} to={to} className={`rounded-[26px] border bg-gradient-to-br ${panel} p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] transition hover:-translate-y-1`}>
-              <div className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl ${badge}`}>
-                <span className="text-base font-bold text-white">{icon}</span>
+      <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
+        <div className="grid gap-3 md:grid-cols-2">
+          {moduleCards.map(({ title, to, desc, stat }) => (
+            <Link
+              key={title}
+              to={to}
+              className="rounded-xl border border-white/10 bg-[#151b24] p-4 transition hover:border-indigo-500/30"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-sm font-semibold text-white">{title}</h2>
+                <span className="text-xs text-slate-500">{stat}</span>
               </div>
-              <h2 className="text-lg font-semibold text-white">{title}</h2>
               <p className="mt-1 text-sm text-slate-400">{desc}</p>
-              <p className="mt-3 text-xs font-medium text-slate-300">{stat}</p>
             </Link>
           ))}
         </div>
 
-        {/* audit feed */}
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <div className={cardClass}>
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Recent activity</h3>
-            <Link to="/settings" className="text-[11px] text-slate-400 hover:text-indigo-300">View all →</Link>
+            <Link to="/settings" className="text-xs text-slate-500 hover:text-indigo-300">
+              View all
+            </Link>
           </div>
           <div className="space-y-2">
             {!stats || stats.audit.length === 0 ? (
               <p className="text-sm text-slate-500">No activity yet.</p>
-            ) : stats.audit.map((log) => (
-              <div key={log.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-white">{log.action}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${log.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
-                    {log.success ? 'ok' : 'fail'}
-                  </span>
+            ) : (
+              stats.audit.map((log) => (
+                <div key={log.id} className="rounded-lg border border-white/5 bg-[#0b1220] px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-white">{log.action}</span>
+                    <Badge tone={log.success ? 'success' : 'danger'}>{log.success ? 'ok' : 'fail'}</Badge>
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-500">{log.resource}</div>
+                  <div className="mt-1 text-[11px] text-slate-600">{new Date(log.created_at).toLocaleString()}</div>
                 </div>
-                <div className="mt-0.5 text-[11px] text-slate-400">{log.resource}</div>
-                <div className="mt-1 text-[10px] text-slate-600">{new Date(log.created_at).toLocaleString()}</div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -624,41 +622,33 @@ function UsersPanel({
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-300">Access control</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Users</h2>
-        </div>
-        <div className="rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-300">
-          {users.length} total accounts
-        </div>
-      </div>
+      <PageHeader title="Users" description="Local accounts with role-based access." actions={<span className="text-sm text-slate-500">{users.length} accounts</span>} />
 
-      <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] md:grid-cols-2">
+      <form onSubmit={handleSubmit} className="grid gap-4 rounded-xl border border-white/10 bg-[#151b24] p-5 md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Username</label>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Full name</label>
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Password</label>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div className="md:col-span-2 flex justify-end">
           <button type="submit" className="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white transition hover:bg-indigo-500">Create user</button>
         </div>
       </form>
 
-      <div className="overflow-hidden rounded-[26px] border border-slate-800 bg-slate-900/80 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+      <div className={tableWrapClass}>
         <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300">
+          <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 font-medium">User</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -698,29 +688,25 @@ function UsersPanel({
 function RolesPanel({ roles }: { roles: Role[] }) {
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-violet-300">Role engine</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Roles</h2>
-        <p className="mt-2 text-slate-300">Permission groups configured for the platform.</p>
-      </div>
+      <PageHeader title="Roles" description="Permission groups configured for the platform." />
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         {roles.length === 0 ? (
-          <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-6 text-slate-400 md:col-span-2">No roles returned yet.</div>
+          <div className={`${cardClass} text-sm text-slate-500 md:col-span-2`}>No roles returned yet.</div>
         ) : (
           roles.map((role) => (
-            <div key={role.id} className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+            <div key={role.id} className={cardClass}>
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-white">{role.name}</h3>
-                <span className="rounded-full bg-violet-500/15 px-2.5 py-1 text-xs font-medium text-violet-300">{role.permissions.length} perms</span>
+                <h3 className="text-base font-semibold text-white">{role.name}</h3>
+                <Badge tone="info">{role.permissions.length} permissions</Badge>
               </div>
-              {role.description && <p className="mt-2 text-sm leading-6 text-slate-300">{role.description}</p>}
-              <ul className="mt-4 space-y-2 text-sm text-slate-300">
+              {role.description && <p className="mt-2 text-sm leading-6 text-slate-400">{role.description}</p>}
+              <ul className="mt-4 space-y-1.5 text-sm text-slate-300">
                 {role.permissions.length === 0 ? (
-                  <li className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-500">No permissions assigned</li>
+                  <li className="rounded-lg border border-white/5 bg-[#0b1220] px-3 py-2 text-slate-500">No permissions assigned</li>
                 ) : (
                   role.permissions.map((permission) => (
-                    <li key={permission.id} className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200">
+                    <li key={permission.id} className="rounded-lg border border-white/5 bg-[#0b1220] px-3 py-2">
                       {permission.name}
                     </li>
                   ))
@@ -780,49 +766,45 @@ function SettingsPanel({
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">Security & controls</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Settings & access</h2>
-        <p className="mt-2 text-slate-300">Platform defaults, audit review, and API token management.</p>
-      </div>
+      <PageHeader title="Settings" description="Platform defaults, audit review, and API tokens." />
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-xl border border-white/10 bg-[#151b24] p-5">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold text-white">Update setting</h3>
             <span className="rounded-full bg-indigo-500/15 px-2 py-1 text-xs font-medium text-indigo-300">Live</span>
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Key</label>
-            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Value</label>
-            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Description</label>
-            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
           <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-500">Save setting</button>
         </form>
 
-        <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-xl border border-white/10 bg-[#151b24] p-5">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold text-white">Create API token</h3>
             <span className="rounded-full bg-violet-500/15 px-2 py-1 text-xs font-medium text-violet-300">Token</span>
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Token name</label>
-            <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20" />
+            <input value={tokenName} onChange={(event) => setTokenName(event.target.value)} className={fieldClass} />
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Expires in days</label>
-            <input type="number" min={1} max={3650} value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value) || 30)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20" />
+            <input type="number" min={1} max={3650} value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value) || 30)} className={fieldClass} />
           </div>
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 px-4 py-2.5 font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:brightness-110">Generate token</button>
+          <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-500">Generate token</button>
           {newToken && (
-            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200 break-all shadow-inner shadow-emerald-500/10">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-200 break-all">
               {newToken}
             </div>
           )}
@@ -830,14 +812,14 @@ function SettingsPanel({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <div className="rounded-xl border border-white/10 bg-[#151b24] p-5">
           <h3 className="text-xl font-semibold text-white">Current settings</h3>
           <div className="mt-4 space-y-3">
             {Object.keys(settings).length === 0 ? (
               <p className="text-slate-400">No settings available.</p>
             ) : (
               Object.entries(settings).map(([keyName, valueName]) => (
-                <div key={keyName} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <div key={keyName} className="rounded-lg border border-white/5 bg-[#0b1220] p-3">
                   <div className="text-[10px] uppercase tracking-[0.16em] text-indigo-300">{keyName}</div>
                   <div className="mt-2 break-all text-sm text-slate-100">{valueName}</div>
                 </div>
@@ -846,14 +828,14 @@ function SettingsPanel({
           </div>
         </div>
 
-        <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+        <div className="rounded-xl border border-white/10 bg-[#151b24] p-5">
           <h3 className="text-xl font-semibold text-white">API tokens</h3>
           <div className="mt-4 space-y-3">
             {apiTokens.length === 0 ? (
               <p className="text-slate-400">No API tokens created yet.</p>
             ) : (
               apiTokens.map((token) => (
-                <div key={token.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <div key={token.id} className="rounded-lg border border-white/5 bg-[#0b1220] p-3">
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-white">{token.name}</span>
                     <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${token.is_active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700 text-slate-300'}`}>
@@ -869,14 +851,14 @@ function SettingsPanel({
         </div>
       </div>
 
-      <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+      <div className="rounded-xl border border-white/10 bg-[#151b24] p-5">
         <h3 className="text-xl font-semibold text-white">Audit log</h3>
         <div className="mt-4 space-y-3">
           {auditLogs.length === 0 ? (
             <p className="text-slate-400">No audit events yet.</p>
           ) : (
             auditLogs.slice(0, 10).map((log) => (
-              <div key={log.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm">
+              <div key={log.id} className="rounded-lg border border-white/5 bg-[#0b1220] p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-white">{log.action}</span>
                   <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${log.success ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>

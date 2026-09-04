@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
+import { PageHeader, btnDanger, btnPrimary, btnSecondary, cardClass, fieldClass, labelClass, tableWrapClass } from './ui'
 
 function authHeaders() {
   const token = localStorage.getItem('nexusops_token') ?? ''
@@ -38,7 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_COLORS[status] ?? 'bg-slate-700 text-slate-300'}`}>{status}</span>
+  return <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status] ?? 'bg-white/10 text-slate-300'}`}>{status}</span>
 }
 
 const TAG_COLORS: Record<string, string> = {
@@ -56,10 +57,10 @@ function TagPill({ tag }: { tag: HostTag }) {
   return <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${cls}`}>{tag.name}</span>
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20'
-const select = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400'
-const section = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
-const label = 'mb-2 block text-sm font-medium text-slate-200'
+const input = fieldClass
+const select = fieldClass
+const section = cardClass
+const label = labelClass
 
 // ── Hosts panel ────────────────────────────────────────────────────────────
 
@@ -145,23 +146,22 @@ export function HostsPanel() {
   return (
     <section className="space-y-6">
       {/* header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">Infrastructure / Inventory</p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Hosts</h2>
-          <p className="mt-2 text-slate-300">Registry of all managed and discovered devices across your homelab.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={handleImport} disabled={importing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
-            {importing ? 'Importing…' : '⟳ Import from IPAM'}
-          </button>
-          <button onClick={() => setShowAdd((p) => !p)} className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-indigo-500/20 transition hover:brightness-110">
-            {showAdd ? '✕ Cancel' : '+ Add host'}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Hosts"
+        description="Registry of managed and discovered devices."
+        actions={
+          <>
+            <button onClick={handleImport} disabled={importing} className={btnSecondary}>
+              {importing ? 'Importing…' : 'Import from IPAM'}
+            </button>
+            <button onClick={() => setShowAdd((p) => !p)} className={btnPrimary}>
+              {showAdd ? 'Cancel' : 'Add host'}
+            </button>
+          </>
+        }
+      />
 
-      {importMsg && <p className={`rounded-2xl px-3 py-2 text-sm ${importMsg.includes('failed') ? 'bg-rose-500/10 text-rose-300' : 'bg-emerald-500/10 text-emerald-300'}`}>{importMsg}</p>}
+      {importMsg && <p className={`rounded-lg px-3 py-2 text-sm ${importMsg.includes('failed') ? 'bg-rose-500/10 text-rose-300' : 'bg-emerald-500/10 text-emerald-300'}`}>{importMsg}</p>}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -183,8 +183,8 @@ export function HostsPanel() {
 
       {/* filters */}
       <div className="flex flex-wrap gap-3">
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by hostname, IP, FQDN, role…" className="flex-1 min-w-[200px] rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400" />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by hostname, IP, FQDN, role…" className="flex-1 min-w-[200px] rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400" />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -234,17 +234,17 @@ export function HostsPanel() {
             </div>
           )}
 
-          {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+          {error && <p className="md:col-span-2 xl:col-span-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
           <div className="md:col-span-2 xl:col-span-3 flex justify-end">
-            <button type="submit" className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-indigo-500/20 transition hover:brightness-110">Save host</button>
+            <button type="submit" className={btnPrimary}>Save host</button>
           </div>
         </form>
       )}
 
       {/* table */}
-      <div className="overflow-x-auto rounded-[26px] border border-slate-800 bg-slate-900/80 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
+      <div className={tableWrapClass}>
         <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300">
+          <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3 font-medium">Hostname</th>
               <th className="px-4 py-3 font-medium">IP</th>
@@ -290,7 +290,7 @@ export function HostsPanel() {
                 <td className="px-4 py-4"><StatusBadge status={host.status} /></td>
                 <td className="px-4 py-4 text-slate-400 text-[11px]">{host.last_seen_at ? new Date(host.last_seen_at).toLocaleString() : '—'}</td>
                 <td className="px-4 py-4 text-right">
-                  <button onClick={() => handleDelete(host.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 transition hover:bg-rose-500/20">Delete</button>
+                  <button onClick={() => handleDelete(host.id)} className={btnDanger}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -332,11 +332,7 @@ export function TagsPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">Infrastructure / Inventory</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Tags</h2>
-        <p className="mt-2 text-slate-300">Labels to categorise and filter hosts.</p>
-      </div>
+      <PageHeader title="Tags" description="Labels used to categorize and filter hosts." />
       <form onSubmit={handleSubmit} className={`${section} flex flex-wrap items-end gap-4`}>
         <div className="flex-1 min-w-[160px]">
           <label className={label}>Tag name</label>
@@ -350,8 +346,8 @@ export function TagsPanel() {
             ))}
           </div>
         </div>
-        {error && <p className="w-full rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-        <button type="submit" className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:brightness-110">Add tag</button>
+        {error && <p className="w-full rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+        <button type="submit" className={btnPrimary}>Add tag</button>
       </form>
       <div className="flex flex-wrap gap-3">
         {tags.length === 0 ? <p className="text-slate-400">No tags yet.</p> : tags.map((t) => (
@@ -394,22 +390,18 @@ export function GroupsPanel() {
 
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">Infrastructure / Inventory</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Groups</h2>
-        <p className="mt-2 text-slate-300">Logical host groupings for bulk operations and filtering.</p>
-      </div>
+      <PageHeader title="Groups" description="Logical host groupings for filtering and bulk operations." />
       <form onSubmit={handleSubmit} className={`${section} grid gap-4 md:grid-cols-2`}>
         <div><label className={label}>Group name</label><input value={name} onChange={(e) => setName(e.target.value)} required className={input} /></div>
         <div><label className={label}>Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className={input} /></div>
-        {error && <p className="md:col-span-2 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+        {error && <p className="md:col-span-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
         <div className="md:col-span-2 flex justify-end">
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 px-5 py-2.5 font-semibold text-white shadow-lg shadow-violet-500/20 transition hover:brightness-110">Add group</button>
+          <button type="submit" className={btnPrimary}>Add group</button>
         </div>
       </form>
-      <div className="overflow-hidden rounded-[26px] border border-slate-800 bg-slate-900/80">
+      <div className={tableWrapClass}>
         <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-          <thead className="bg-slate-950/80 text-slate-300">
+          <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500">
             <tr><th className="px-4 py-3 font-medium">Group</th><th className="px-4 py-3 font-medium">Description</th><th className="px-4 py-3 font-medium">Created</th><th className="px-4 py-3" /></tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-slate-900/60">
@@ -419,7 +411,7 @@ export function GroupsPanel() {
                   <td className="px-4 py-4 font-semibold text-white">{g.name}</td>
                   <td className="px-4 py-4 text-slate-300">{g.description ?? '—'}</td>
                   <td className="px-4 py-4 text-slate-400">{new Date(g.created_at).toLocaleDateString()}</td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(g.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs text-rose-300 hover:bg-rose-500/20">Delete</button></td>
+                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(g.id)} className={btnDanger}>Delete</button></td>
                 </tr>
               ))}
           </tbody>
