@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
+import { formatApiDetail, isLanDiscovery } from './ipamDiscover'
 
 function authHeaders() {
   const token = localStorage.getItem('nexusops_token') ?? ''
@@ -109,19 +110,31 @@ export function NetworkOverview() {
   // auto-detect on mount so the page shows likely LAN subnets immediately
   useEffect(() => { handleDiscover() }, [handleDiscover])
 
+  useEffect(() => {
+    const lan = discovered.find(isLanDiscovery)
+    if (lan) {
+      setQuickCidr((current) => current || lan.cidr)
+    }
+  }, [discovered])
+
   const handleQuickAdd = async (e: FormEvent, prefillCidr?: string) => {
     e.preventDefault()
-    const cidr = prefillCidr ?? quickCidr
-    const name = prefillCidr ? cidr : (quickName || cidr)
+    const cidr = (prefillCidr ?? quickCidr).trim()
+    const name = (prefillCidr ? cidr : (quickName || cidr)).trim()
     if (!cidr) return
     setQuickAdding(true); setQuickError('')
     try {
       const r = await fetch(`${API_BASE_URL}/api/v1/ipam/subnets`, {
         method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ cidr, name, gateway: quickGateway || null, status: 'active' }),
+        body: JSON.stringify({
+          cidr,
+          name: name || cidr,
+          gateway: prefillCidr ? null : (quickGateway || null),
+          status: 'active',
+        }),
       })
-      const data = await r.json()
-      if (!r.ok) { setQuickError(data.detail ?? 'Failed to add subnet'); return }
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) { setQuickError(formatApiDetail(data.detail)); return }
       setSubnets((p) => [...p, data].sort((a, b) => a.cidr.localeCompare(b.cidr)))
       loadUtil(data)
       setQuickCidr(''); setQuickName(''); setQuickGateway('')
@@ -145,8 +158,8 @@ export function NetworkOverview() {
     }
   }
 
-  const configuredNets = discovered.filter((d) => d.interface === 'configured')
-  const containerNets = discovered.filter((d) => d.interface !== 'configured')
+  const configuredNets = discovered.filter(isLanDiscovery)
+  const containerNets = discovered.filter((d) => !isLanDiscovery(d))
 
   return (
     <section className="space-y-6">
@@ -170,15 +183,15 @@ export function NetworkOverview() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[160px]">
             <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-slate-400">CIDR</label>
-            <input value={quickCidr} onChange={(e) => setQuickCidr(e.target.value)} required placeholder="192.168.1.0/24" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" />
+            <input value={quickCidr} onChange={(e) => setQuickCidr(e.target.value)} required placeholder="e.g. 192.168.1.0/24" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" />
           </div>
           <div className="flex-1 min-w-[140px]">
             <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-slate-400">Name (optional)</label>
-            <input value={quickName} onChange={(e) => setQuickName(e.target.value)} placeholder="Home LAN" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" />
+            <input value={quickName} onChange={(e) => setQuickName(e.target.value)} placeholder="e.g. Home LAN" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400" />
           </div>
           <div className="flex-1 min-w-[140px]">
             <label className="mb-2 block text-[11px] uppercase tracking-[0.15em] text-slate-400">Gateway (optional)</label>
-            <input value={quickGateway} onChange={(e) => setQuickGateway(e.target.value)} placeholder="192.168.1.1" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" />
+            <input value={quickGateway} onChange={(e) => setQuickGateway(e.target.value)} placeholder="e.g. 192.168.1.1" className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 font-mono text-slate-100 outline-none focus:border-cyan-400" />
           </div>
           <button type="submit" disabled={quickAdding} className="h-[46px] rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110 disabled:opacity-60">
             {quickAdding ? 'Adding…' : '+ Add & Scan'}
@@ -209,12 +222,15 @@ export function NetworkOverview() {
           {containerNets.length > 0 && (
             <div>
               <p className="mb-3 text-sm font-semibold text-slate-400">Container interfaces (Docker bridge — not your LAN)</p>
+              <p className="mb-3 text-[11px] text-slate-400">These are this container’s own networks. Click one only if you really want to register it.</p>
               <div className="flex flex-wrap gap-3">
                 {containerNets.map((n) => (
-                  <div key={n.cidr} className="flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-950/40 px-3 py-2 text-sm">
-                    <span className="font-mono font-semibold text-slate-400">{n.cidr}</span>
-                    <span className="text-slate-500">{n.interface}</span>
-                  </div>
+                  <form key={n.cidr} onSubmit={(e) => handleQuickAdd(e, n.cidr)}>
+                    <button type="submit" className="flex items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-950/40 px-3 py-2 text-sm transition hover:border-cyan-400">
+                      <span className="font-mono font-semibold text-slate-300">{n.cidr}</span>
+                      <span className="text-slate-500">{n.interface}</span>
+                    </button>
+                  </form>
                 ))}
               </div>
               <p className="mt-3 text-[11px] text-slate-500">To always show specific subnets here, add <code className="rounded bg-slate-800 px-1 py-0.5 text-cyan-300">SCAN_NETWORKS=192.168.1.0/24</code> to your <code className="rounded bg-slate-800 px-1 py-0.5 text-cyan-300">.env</code> and restart.</p>
