@@ -9,7 +9,7 @@
 name: nexusops
 
 # Proxmox VE / unprivileged LXC: AppArmor and seccomp otherwise deny
-# eventfd/epoll (uvloop) and overlay writes. Applied to API and worker.
+# eventfd/epoll (uvloop) and overlay writes. Applied to API, worker, UI.
 x-pve-compat: &pve-compat
   security_opt:
     - seccomp:unconfined
@@ -164,10 +164,13 @@ services:
     command: celery -A app.worker worker --loglevel=info
 
   frontend:
+    <<: *pve-compat
     image: ${NEXUSOPS_FRONTEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-frontend:latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
     container_name: nexusops-frontend
     restart: unless-stopped
     pull_policy: ${PULL_POLICY:-missing}
@@ -178,6 +181,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5173/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
 
   openldap:
     image: osixia/openldap:1.5.0

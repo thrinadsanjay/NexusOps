@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { API_BASE_URL } from './apiBase'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
 import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
 import { DnsOverview } from './Dns'
@@ -89,8 +90,6 @@ type ApiToken = {
   is_active: boolean
   token?: string
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('nexusops_token'))
@@ -502,7 +501,6 @@ function Login({ onSubmit, loading, error }: LoginProps) {
 
 function Overview({ user }: { user: AuthUser }) {
   const greeting = useMemo(() => user.full_name || user.username || 'Operator', [user])
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
   const token = localStorage.getItem('nexusops_token') ?? ''
 
   type Stats = {

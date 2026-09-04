@@ -83,6 +83,25 @@ docker logs nexusops-backend --tail 80
 
 Do not delete `nexusops_postgres_data` for this error.
 
+### Frontend `read ENOTCONN` (esbuild / Vite)
+
+```
+Error: read ENOTCONN
+    at ensureServiceIsRunning (/app/node_modules/esbuild/lib/main.js:1975:29)
+```
+
+The old image ran `vite` inside the container. Esbuild’s helper process cannot use stdio sockets on many Proxmox LXC Docker hosts. The frontend image now compiles the SPA at **build** time and runs **nginx** only.
+
+After merge to `Development`, wait for GHCR `nexusops-frontend:latest`, then on the server:
+
+```bash
+git pull
+docker compose pull frontend
+docker compose up -d --force-recreate frontend
+```
+
+`VITE_API_BASE_URL` of `http://localhost:8000` is rewritten to same-origin so a browser on another machine hitting port 5173 still reaches the API via nginx `/api`.
+
 ### Postgres `Operation not permitted` on initdb
 
 Recent `postgres:*-alpine` images (Alpine 3.24) call syscalls that older Docker/`libseccomp` on RHEL lab hosts reject. Logs look like:
