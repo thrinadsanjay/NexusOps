@@ -28,7 +28,7 @@ function LeaseBadge({ s }: { s: string }) {
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${LEASE_STATUS[s] ?? 'bg-slate-700 text-slate-300'}`}>{s}</span>
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400'
+const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400'
 const label = 'mb-2 block text-sm font-medium text-slate-200'
 const card = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
 
@@ -299,7 +299,7 @@ export function DhcpPanel() {
                   <div><label className={label}>MAC address</label><input value={lMac} onChange={(e) => setLMac(e.target.value)} required placeholder="aa:bb:cc:dd:ee:ff" className={`${input} font-mono`} /></div>
                   <div><label className={label}>Hostname</label><input value={lHost} onChange={(e) => setLHost(e.target.value)} className={input} /></div>
                   {lErr && <p className="md:col-span-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{lErr}</p>}
-                  <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-emerald-400 to-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add lease</button></div>
+                  <div className="md:col-span-3 flex justify-end"><button type="submit" className="rounded-2xl bg-gradient-to-r from-emerald-500 to-indigo-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110">Add lease</button></div>
                 </form>
               )}
 

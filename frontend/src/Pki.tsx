@@ -20,7 +20,7 @@ const CERT_STATUS: Record<string, string> = {
   pending: 'bg-amber-500/15 text-amber-300',
 }
 const TYPE_BADGE: Record<string, string> = {
-  server:   'bg-cyan-500/15 text-cyan-300',
+  server:   'bg-indigo-500/15 text-indigo-300',
   client:   'bg-violet-500/15 text-violet-300',
   wildcard: 'bg-indigo-500/15 text-indigo-300',
   email:    'bg-sky-500/15 text-sky-300',

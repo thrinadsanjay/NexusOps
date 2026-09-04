@@ -56,8 +56,8 @@ function TagPill({ tag }: { tag: HostTag }) {
   return <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${cls}`}>{tag.name}</span>
 }
 
-const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/20'
-const select = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-cyan-400'
+const input = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20'
+const select = 'w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none focus:border-indigo-400'
 const section = 'rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]'
 const label = 'mb-2 block text-sm font-medium text-slate-200'
 
@@ -155,7 +155,7 @@ export function HostsPanel() {
           <button onClick={handleImport} disabled={importing} className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-300 transition hover:bg-sky-500/20 disabled:opacity-60">
             {importing ? 'Importing…' : '⟳ Import from IPAM'}
           </button>
-          <button onClick={() => setShowAdd((p) => !p)} className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">
+          <button onClick={() => setShowAdd((p) => !p)} className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-indigo-500/20 transition hover:brightness-110">
             {showAdd ? '✕ Cancel' : '+ Add host'}
           </button>
         </div>
@@ -183,8 +183,8 @@ export function HostsPanel() {
 
       {/* filters */}
       <div className="flex flex-wrap gap-3">
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by hostname, IP, FQDN, role…" className="flex-1 min-w-[200px] rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400" />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-cyan-400">
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by hostname, IP, FQDN, role…" className="flex-1 min-w-[200px] rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400" />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400">
           <option value="">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -236,7 +236,7 @@ export function HostsPanel() {
 
           {error && <p className="md:col-span-2 xl:col-span-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
           <div className="md:col-span-2 xl:col-span-3 flex justify-end">
-            <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Save host</button>
+            <button type="submit" className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-indigo-500/20 transition hover:brightness-110">Save host</button>
           </div>
         </form>
       )}
@@ -351,7 +351,7 @@ export function TagsPanel() {
           </div>
         </div>
         {error && <p className="w-full rounded-2xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
-        <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:brightness-110">Add tag</button>
+        <button type="submit" className="rounded-2xl bg-gradient-to-r from-indigo-600 to-indigo-500 px-5 py-2.5 font-semibold text-slate-950 transition hover:brightness-110">Add tag</button>
       </form>
       <div className="flex flex-wrap gap-3">
         {tags.length === 0 ? <p className="text-slate-400">No tags yet.</p> : tags.map((t) => (

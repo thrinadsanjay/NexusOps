@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { API_BASE_URL } from './apiBase'
+import { Sidebar, currentPageLabel } from './Sidebar'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
 import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
 import { DnsOverview } from './Dns'
@@ -8,20 +9,6 @@ import { DhcpPanel } from './Dhcp'
 import { PkiPanel } from './Pki'
 import { LdapPanel } from './Ldap'
 import { ToolsPanel } from './Tools'
-
-const navItems = [
-  { label: 'Overview', to: '/' },
-  { label: 'Users', to: '/users' },
-  { label: 'Roles', to: '/roles' },
-  { label: 'Network', to: '/ipam' },
-  { label: 'Inventory', to: '/inventory' },
-  { label: 'DNS', to: '/dns' },
-  { label: 'DHCP', to: '/dhcp' },
-  { label: 'PKI', to: '/pki' },
-  { label: 'LDAP', to: '/ldap' },
-  { label: 'Tools', to: '/tools' },
-  { label: 'Settings', to: '/settings' },
-]
 
 type AuthUser = {
   id: number
@@ -104,8 +91,11 @@ function App() {
   const [apiTokens, setApiTokens] = useState<ApiToken[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const location = useLocation()
 
   const isAuthenticated = Boolean(token && user)
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), [])
 
   useEffect(() => {
     if (!token) {
@@ -317,80 +307,75 @@ function App() {
     return data.token as string
   }
 
+  const renderRoutes = () => (
+    <Routes>
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login onSubmit={handleLogin} loading={loading} error={error} />} />
+      <Route path="/" element={isAuthenticated ? <Overview user={user!} /> : <Navigate to="/login" replace />} />
+      <Route path="/users" element={isAuthenticated ? <UsersPanel users={users} onCreateUser={handleCreateUser} /> : <Navigate to="/login" replace />} />
+      <Route path="/roles" element={isAuthenticated ? <RolesPanel roles={roles} /> : <Navigate to="/login" replace />} />
+      <Route path="/ipam/vlans" element={isAuthenticated ? <VLansPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/ipam/subnets" element={isAuthenticated ? <SubnetsPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/ipam/addresses" element={isAuthenticated ? <IPAddressesPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/ipam" element={isAuthenticated ? <NetworkOverview /> : <Navigate to="/login" replace />} />
+      <Route path="/inventory" element={isAuthenticated ? <HostsPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/inventory/tags" element={isAuthenticated ? <TagsPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/inventory/groups" element={isAuthenticated ? <GroupsPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/dns" element={isAuthenticated ? <DnsOverview /> : <Navigate to="/login" replace />} />
+      <Route path="/dhcp" element={isAuthenticated ? <DhcpPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/pki" element={isAuthenticated ? <PkiPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/ldap" element={isAuthenticated ? <LdapPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/tools" element={isAuthenticated ? <ToolsPanel /> : <Navigate to="/login" replace />} />
+      <Route
+        path="/settings"
+        element={
+          isAuthenticated ? (
+            <SettingsPanel
+              settings={settings}
+              auditLogs={auditLogs}
+              apiTokens={apiTokens}
+              onSaveSetting={handleSaveSetting}
+              onCreateToken={handleCreateToken}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
+    </Routes>
+  )
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.14),_transparent_35%),linear-gradient(180deg,_#020817_0%,_#0f172a_100%)] text-slate-100">
-      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 via-sky-500 to-indigo-500 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20">
-              N
-            </div>
-            <div>
-              <div className="text-lg font-semibold tracking-tight text-white">NexusOps</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Operations Platform</div>
-            </div>
-          </div>
-
-          {isAuthenticated && (
-            <div className="flex items-center gap-2 md:gap-4">
-              {navItems.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="rounded-full px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
-                >
-                  {item.label}
-                </Link>
-              ))}
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-full border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 transition hover:border-slate-500 hover:bg-slate-800 hover:text-white"
-              >
-                Sign out
-              </button>
-            </div>
-          )}
-        </nav>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-6 py-10">
-        <Routes>
-          <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login onSubmit={handleLogin} loading={loading} error={error} />} />
-          <Route path="/" element={isAuthenticated ? <Overview user={user!} /> : <Navigate to="/login" replace />} />
-          <Route path="/users" element={isAuthenticated ? <UsersPanel users={users} onCreateUser={handleCreateUser} /> : <Navigate to="/login" replace />} />
-          <Route path="/roles" element={isAuthenticated ? <RolesPanel roles={roles} /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam/vlans" element={isAuthenticated ? <VLansPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam/subnets" element={isAuthenticated ? <SubnetsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam/addresses" element={isAuthenticated ? <IPAddressesPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ipam" element={isAuthenticated ? <NetworkOverview /> : <Navigate to="/login" replace />} />
-          <Route path="/inventory" element={isAuthenticated ? <HostsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/inventory/tags" element={isAuthenticated ? <TagsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/inventory/groups" element={isAuthenticated ? <GroupsPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/dns" element={isAuthenticated ? <DnsOverview /> : <Navigate to="/login" replace />} />
-          <Route path="/dhcp" element={isAuthenticated ? <DhcpPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/pki" element={isAuthenticated ? <PkiPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/ldap" element={isAuthenticated ? <LdapPanel /> : <Navigate to="/login" replace />} />
-          <Route path="/tools" element={isAuthenticated ? <ToolsPanel /> : <Navigate to="/login" replace />} />
-          <Route
-            path="/settings"
-            element={
-              isAuthenticated ? (
-                <SettingsPanel
-                  settings={settings}
-                  auditLogs={auditLogs}
-                  apiTokens={apiTokens}
-                  onSaveSetting={handleSaveSetting}
-                  onCreateToken={handleCreateToken}
-                />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
+    <div className="min-h-screen bg-[#0f1419] text-slate-100">
+      {isAuthenticated ? (
+        <div className="flex min-h-screen">
+          <Sidebar
+            userName={user?.full_name || user?.username || 'Operator'}
+            userRole={user?.is_superuser ? 'Administrator' : 'Operator'}
+            onLogout={handleLogout}
+            mobileOpen={mobileNavOpen}
+            onCloseMobile={closeMobileNav}
           />
-          <Route path="*" element={<Navigate to={isAuthenticated ? '/' : '/login'} replace />} />
-        </Routes>
-      </main>
+          <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+            <header className="flex h-14 items-center justify-between border-b border-white/10 bg-[#111827] px-4 lg:px-6">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-slate-200 lg:hidden"
+                  onClick={() => setMobileNavOpen(true)}
+                >
+                  Menu
+                </button>
+                <p className="text-sm font-medium text-slate-200">{currentPageLabel(location.pathname)}</p>
+              </div>
+              <p className="truncate text-sm text-slate-500">{user?.email}</p>
+            </header>
+            <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">{renderRoutes()}</main>
+          </div>
+        </div>
+      ) : (
+        <main className="min-h-screen">{renderRoutes()}</main>
+      )}
     </div>
   )
 }
@@ -411,46 +396,34 @@ function Login({ onSubmit, loading, error }: LoginProps) {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-96px)] items-center justify-center py-10">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-slate-800/80 bg-slate-900/80 shadow-[0_30px_80px_rgba(15,23,42,0.8)] backdrop-blur-sm md:grid-cols-[1.1fr_0.9fr]">
-        <div className="relative overflow-hidden bg-gradient-to-br from-cyan-500/20 via-sky-600/10 to-slate-950 p-8 md:p-10">
-          <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-cyan-400/20 blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-28 w-28 rounded-full bg-indigo-500/20 blur-3xl" />
-
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-cyan-300">
-              Secure access
-            </div>
-            <h1 className="mt-6 text-4xl font-bold tracking-tight text-white">Welcome back</h1>
-            <p className="mt-4 max-w-md text-base leading-7 text-slate-300">
-              Manage your infrastructure, review operational health, and control access with a trusted local admin experience.
-            </p>
-
-            <div className="mt-8 space-y-4 text-sm text-slate-200">
-              {[
-                'Local authentication with RBAC',
-                'Admin bootstrap and audit logs',
-                'API token and settings management',
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-3 rounded-2xl border border-slate-700/80 bg-slate-900/40 px-3 py-2.5">
-                  <span className="inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.9)]" />
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
+    <div className="flex min-h-screen items-center justify-center px-4 py-10">
+      <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[#111827] shadow-2xl md:grid-cols-[1.05fr_0.95fr]">
+        <div className="bg-[#0b1220] p-8 md:p-10">
+          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-indigo-300">
+            Secure access
+          </div>
+          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white">Welcome back</h1>
+          <p className="mt-4 max-w-md text-base leading-7 text-slate-400">
+            Sign in to manage infrastructure, identity, and platform operations from one control plane.
+          </p>
+          <div className="mt-8 space-y-3 text-sm text-slate-300">
+            {['Role-based access control', 'Audit log and API tokens', 'Network, DNS, DHCP, and directory'].map((item) => (
+              <div key={item} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+                <span className="inline-flex h-2 w-2 rounded-full bg-indigo-400" />
+                <span>{item}</span>
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="p-8 md:p-10">
-          <div className="mb-8">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-500 text-base font-black text-slate-950">
-                N
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">NexusOps</p>
-                <h2 className="mt-1 text-2xl font-bold text-white">Sign in</h2>
-              </div>
+          <div className="mb-8 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
+              N
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">NexusOps</p>
+              <h2 className="text-2xl font-semibold text-white">Sign in</h2>
             </div>
           </div>
 
@@ -465,7 +438,7 @@ function Login({ onSubmit, loading, error }: LoginProps) {
                 type="text"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-3 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
 
@@ -479,7 +452,7 @@ function Login({ onSubmit, loading, error }: LoginProps) {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-3 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
+                className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-3 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
 
@@ -488,7 +461,7 @@ function Login({ onSubmit, loading, error }: LoginProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-3.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-indigo-600 px-4 py-3.5 font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
@@ -526,7 +499,7 @@ function Overview({ user }: { user: AuthUser }) {
   }, [loadStats])
 
   const moduleCards = [
-    { title: 'Network / IPAM', to: '/ipam', icon: 'N', desc: 'Subnets, VLANs, IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-cyan-500/20 to-cyan-500/5 border-cyan-500/30', badge: 'bg-cyan-500/15 text-cyan-300' },
+    { title: 'Network / IPAM', to: '/ipam', icon: 'N', desc: 'Subnets, VLANs, IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—', panel: 'from-indigo-500/15 to-transparent border-indigo-500/20', badge: 'bg-indigo-500/15 text-indigo-300' },
     { title: 'Inventory', to: '/inventory', icon: 'I', desc: 'Hosts, groups, tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—', panel: 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/30', badge: 'bg-emerald-500/15 text-emerald-300' },
     { title: 'DNS', to: '/dns', icon: 'D', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—', panel: 'from-indigo-500/20 to-indigo-500/5 border-indigo-500/30', badge: 'bg-indigo-500/15 text-indigo-300' },
     { title: 'DHCP', to: '/dhcp', icon: 'H', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—', panel: 'from-amber-500/20 to-amber-500/5 border-amber-500/30', badge: 'bg-amber-500/15 text-amber-300' },
@@ -538,7 +511,7 @@ function Overview({ user }: { user: AuthUser }) {
 
   const kpis = stats ? [
     { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active`, badge: 'bg-emerald-500/15 text-emerald-300' },
-    { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned`, badge: 'bg-cyan-500/15 text-cyan-300' },
+    { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned`, badge: 'bg-indigo-500/15 text-indigo-300' },
     { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones`, badge: 'bg-indigo-500/15 text-indigo-300' },
     { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static`, badge: 'bg-amber-500/15 text-amber-300' },
   ] : []
@@ -549,8 +522,8 @@ function Overview({ user }: { user: AuthUser }) {
       <div className="rounded-[30px] border border-slate-800/80 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.45)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">NexusOps · Operations Platform</p>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">Welcome, {greeting}</h1>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-300">Operations overview</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white md:text-4xl">Welcome, {greeting}</h1>
           </div>
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
@@ -594,7 +567,7 @@ function Overview({ user }: { user: AuthUser }) {
         <div className="rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Recent activity</h3>
-            <Link to="/settings" className="text-[11px] text-slate-400 hover:text-cyan-300">View all →</Link>
+            <Link to="/settings" className="text-[11px] text-slate-400 hover:text-indigo-300">View all →</Link>
           </div>
           <div className="space-y-2">
             {!stats || stats.audit.length === 0 ? (
@@ -653,7 +626,7 @@ function UsersPanel({
     <section className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-300">Access control</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-indigo-300">Access control</p>
           <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">Users</h2>
         </div>
         <div className="rounded-full border border-slate-700 bg-slate-900/80 px-3 py-1.5 text-sm text-slate-300">
@@ -664,22 +637,22 @@ function UsersPanel({
       <form onSubmit={handleSubmit} className="grid gap-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)] md:grid-cols-2">
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <input value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Username</label>
-          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <input value={username} onChange={(event) => setUsername(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Full name</label>
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-slate-200">Password</label>
-          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
         </div>
         <div className="md:col-span-2 flex justify-end">
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-5 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Create user</button>
+          <button type="submit" className="rounded-lg bg-indigo-600 px-5 py-2.5 font-semibold text-white transition hover:bg-indigo-500">Create user</button>
         </div>
       </form>
 
@@ -817,21 +790,21 @@ function SettingsPanel({
         <form onSubmit={handleSettingSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xl font-semibold text-white">Update setting</h3>
-            <span className="rounded-full bg-cyan-500/15 px-2 py-1 text-xs font-medium text-cyan-300">Live</span>
+            <span className="rounded-full bg-indigo-500/15 px-2 py-1 text-xs font-medium text-indigo-300">Live</span>
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Key</label>
-            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            <input value={key} onChange={(event) => setKey(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Value</label>
-            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            <input value={value} onChange={(event) => setValue(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-200">Description</label>
-            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20" />
+            <input value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-100 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
           </div>
-          <button type="submit" className="rounded-2xl bg-gradient-to-r from-cyan-400 to-sky-500 px-4 py-2.5 font-semibold text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:brightness-110">Save setting</button>
+          <button type="submit" className="rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-500">Save setting</button>
         </form>
 
         <form onSubmit={handleTokenSubmit} className="space-y-4 rounded-[26px] border border-slate-800 bg-slate-900/80 p-5 shadow-[0_12px_30px_rgba(15,23,42,0.28)]">
@@ -865,7 +838,7 @@ function SettingsPanel({
             ) : (
               Object.entries(settings).map(([keyName, valueName]) => (
                 <div key={keyName} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-cyan-300">{keyName}</div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-indigo-300">{keyName}</div>
                   <div className="mt-2 break-all text-sm text-slate-100">{valueName}</div>
                 </div>
               ))
