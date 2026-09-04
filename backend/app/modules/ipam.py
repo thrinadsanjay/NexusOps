@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_permission
 from app.db import get_db
 from app.models import IPAddress, Subnet, VLan
+from app.modules.ipam_enrich import apply_missing, lookup_details
 from app.schemas import (
     DiscoveredNetwork,
     IPAddressCreate,
@@ -221,10 +222,49 @@ def update_address(
     if not ip:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IP address not found")
     for field, value in payload.model_dump(exclude_none=True).items():
+        if isinstance(value, str):
+            value = value.strip() or None
         setattr(ip, field, value)
     db.commit()
     db.refresh(ip)
     return ip
+
+
+@router.post("/addresses/lookup-missing", response_model=dict)
+def lookup_missing_addresses(
+    db: Session = Depends(get_db),
+    _: object = Depends(require_permission("ipam:write")),
+) -> dict:
+    rows = db.query(IPAddress).all()
+    updated = 0
+    for ip in rows:
+        if ip.hostname and ip.dns_name and ip.mac_address:
+            continue
+        details = lookup_details(db, ip.address, ping_first=False)
+        if apply_missing(ip, details):
+            updated += 1
+    db.commit()
+    return {"updated": updated, "total": len(rows)}
+
+
+@router.post("/addresses/{ip_id}/lookup", response_model=dict)
+def lookup_address(
+    ip_id: int,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_permission("ipam:write")),
+) -> dict:
+    ip = db.query(IPAddress).filter(IPAddress.id == ip_id).first()
+    if not ip:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IP address not found")
+    details = lookup_details(db, ip.address, ping_first=True)
+    filled = apply_missing(ip, details)
+    db.commit()
+    db.refresh(ip)
+    return {
+        "address": IPAddressRead.model_validate(ip).model_dump(mode="json"),
+        "filled": filled,
+        "sources": details.sources,
+    }
 
 
 @router.delete("/addresses/{ip_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)

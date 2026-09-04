@@ -50,12 +50,18 @@ def scan_subnet_task(self, subnet_id: int) -> dict:  # type: ignore[override]
                 existing.last_seen_at = now
                 if r.hostname and not existing.hostname:
                     existing.hostname = r.hostname
+                if r.hostname and not existing.dns_name:
+                    existing.dns_name = r.hostname
+                if r.mac_address and not existing.mac_address:
+                    existing.mac_address = r.mac_address
                 updated += 1
             else:
                 db.add(IPAddress(
                     address=r.address,
                     subnet_id=subnet.id,
                     hostname=r.hostname,
+                    dns_name=r.hostname,
+                    mac_address=r.mac_address,
                     status="assigned",
                     last_seen_at=now,
                 ))

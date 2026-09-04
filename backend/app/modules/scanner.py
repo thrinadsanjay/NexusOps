@@ -24,6 +24,20 @@ class ScanResult:
     address: str
     hostname: str | None
     is_alive: bool
+    mac_address: str | None = None
+
+
+def _probe(ip: str) -> ScanResult:
+    from app.modules.ipam_enrich import lookup_network_details
+
+    alive = _icmp_ping(ip) or _tcp_ping(ip)
+    hostname: str | None = None
+    mac_address: str | None = None
+    if alive:
+        details = lookup_network_details(ip, ping_first=False)
+        hostname = details.hostname
+        mac_address = details.mac_address
+    return ScanResult(address=ip, hostname=hostname, is_alive=alive, mac_address=mac_address)
 
 
 def _icmp_ping(ip: str) -> bool:
@@ -45,17 +59,6 @@ def _tcp_ping(ip: str, ports: tuple[int, ...] = (22, 53, 80, 443, 445, 8080, 844
         except (OSError, ConnectionRefusedError, TimeoutError):
             pass
     return False
-
-
-def _probe(ip: str) -> ScanResult:
-    alive = _icmp_ping(ip) or _tcp_ping(ip)
-    hostname: str | None = None
-    if alive:
-        try:
-            hostname = socket.gethostbyaddr(ip)[0]
-        except Exception:
-            pass
-    return ScanResult(address=ip, hostname=hostname, is_alive=alive)
 
 
 def scan_network(cidr: str, max_workers: int = 64) -> list[ScanResult]:

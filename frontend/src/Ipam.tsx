@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
 import { formatApiDetail, isLanDiscovery } from './ipamDiscover'
-import { PageHeader, btnDanger, btnPrimary, btnSecondary, fieldClass, tableWrapClass } from './ui'
+import { Alert, PageHeader, btnDanger, btnGhost, btnPrimary, btnSecondary, fieldClass, tableWrapClass } from './ui'
 
 function authHeaders() {
   const token = localStorage.getItem('nexusops_token') ?? ''
@@ -28,6 +28,30 @@ const STATUS_BADGE: Record<string, string> = {
 
 function StatusBadge({ status }: { status: string }) {
   return <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${STATUS_BADGE[status] ?? 'bg-slate-700 text-slate-300'}`}>{status}</span>
+}
+
+const cellField =
+  'w-full min-w-[7.5rem] rounded-md border border-white/10 bg-[#0b1220] px-2 py-1.5 text-xs text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20'
+
+type AddressDraft = {
+  hostname: string
+  dns_name: string
+  mac_address: string
+  description: string
+}
+
+function draftFrom(ip: IPAddress): AddressDraft {
+  return {
+    hostname: ip.hostname ?? '',
+    dns_name: ip.dns_name ?? '',
+    mac_address: ip.mac_address ?? '',
+    description: ip.description ?? '',
+  }
+}
+
+function draftIsDirty(ip: IPAddress, draft: AddressDraft): boolean {
+  const orig = draftFrom(ip)
+  return orig.hostname !== draft.hostname || orig.dns_name !== draft.dns_name || orig.mac_address !== draft.mac_address || orig.description !== draft.description
 }
 
 function UtilBar({ util }: { util: SubnetUtil }) {
@@ -432,69 +456,189 @@ export function IPAddressesPanel() {
   const [dnsName, setDnsName] = useState('')
   const [filter, setFilter] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [drafts, setDrafts] = useState<Record<number, AddressDraft>>({})
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [lookingUpId, setLookingUpId] = useState<number | null>(null)
+  const [lookingUpAll, setLookingUpAll] = useState(false)
 
-  useEffect(() => {
-    Promise.all([
+  const load = useCallback(() => {
+    return Promise.all([
       fetch(`${API_BASE_URL}/api/v1/ipam/addresses`, { headers: authHeaders() }).then((r) => r.json()),
       fetch(`${API_BASE_URL}/api/v1/ipam/subnets`, { headers: authHeaders() }).then((r) => r.json()),
-    ]).then(([i, s]) => { setIps(i); setSubnets(s) }).catch(() => setError('Failed to load'))
+    ]).then(([i, s]) => {
+      setIps(Array.isArray(i) ? i : [])
+      setSubnets(Array.isArray(s) ? s : [])
+    }).catch(() => setError('Failed to load'))
   }, [])
+
+  useEffect(() => { void load() }, [load])
 
   const subnetLabel = (id: number | null) => subnets.find((s) => s.id === id)?.cidr ?? '—'
 
+  const rowDraft = (ip: IPAddress) => drafts[ip.id] ?? draftFrom(ip)
+
+  const patchDraft = (ip: IPAddress, field: keyof AddressDraft, value: string) => {
+    setDrafts((prev) => ({ ...prev, [ip.id]: { ...rowDraft(ip), [field]: value } }))
+  }
+
   const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault(); setError('')
+    e.preventDefault(); setError(''); setNotice('')
     const res = await fetch(`${API_BASE_URL}/api/v1/ipam/addresses`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ address, subnet_id: subnetId ? Number(subnetId) : null, hostname: hostname || null, description: description || null, mac_address: mac || null, dns_name: dnsName || null, status: 'assigned' }) })
     const data = await res.json()
-    if (!res.ok) { setError(data.detail ?? 'Failed'); return }
+    if (!res.ok) { setError(formatApiDetail(data.detail) || 'Failed'); return }
     setIps((p) => [...p, data].sort((a, b) => a.address.localeCompare(b.address)))
     setAddress(''); setSubnetId(''); setHostname(''); setDescription(''); setMac(''); setDnsName('')
   }
 
   const handleDelete = async (id: number) => {
     const r = await fetch(`${API_BASE_URL}/api/v1/ipam/addresses/${id}`, { method: 'DELETE', headers: authHeaders() })
-    if (r.ok || r.status === 204) setIps((p) => p.filter((i) => i.id !== id))
+    if (r.ok || r.status === 204) {
+      setIps((p) => p.filter((i) => i.id !== id))
+      setDrafts((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }
   }
 
-  const filtered = filter ? ips.filter((i) => i.address.includes(filter) || (i.hostname ?? '').toLowerCase().includes(filter.toLowerCase())) : ips
+  const handleSave = async (ip: IPAddress) => {
+    const draft = rowDraft(ip)
+    setError(''); setNotice(''); setSavingId(ip.id)
+    const res = await fetch(`${API_BASE_URL}/api/v1/ipam/addresses/${ip.id}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        hostname: draft.hostname,
+        dns_name: draft.dns_name,
+        mac_address: draft.mac_address,
+        description: draft.description,
+      }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setSavingId(null)
+    if (!res.ok) { setError(formatApiDetail(data.detail) || 'Failed to save'); return }
+    setIps((p) => p.map((row) => (row.id === ip.id ? data : row)))
+    setDrafts((prev) => {
+      const next = { ...prev }
+      delete next[ip.id]
+      return next
+    })
+  }
+
+  const handleLookup = async (ip: IPAddress) => {
+    setError(''); setNotice(''); setLookingUpId(ip.id)
+    const res = await fetch(`${API_BASE_URL}/api/v1/ipam/addresses/${ip.id}/lookup`, { method: 'POST', headers: authHeaders() })
+    const data = await res.json().catch(() => ({}))
+    setLookingUpId(null)
+    if (!res.ok) { setError(formatApiDetail(data.detail) || 'Lookup failed'); return }
+    if (data.address) {
+      setIps((p) => p.map((row) => (row.id === ip.id ? data.address : row)))
+      setDrafts((prev) => {
+        const next = { ...prev }
+        delete next[ip.id]
+        return next
+      })
+    }
+    const filled = Array.isArray(data.filled) ? data.filled : []
+    const sources = Array.isArray(data.sources) ? data.sources : []
+    if (filled.length) {
+      setNotice(`Filled ${filled.join(', ')}${sources.length ? ` from ${sources.join(', ')}` : ''}.`)
+    } else {
+      setNotice('No extra details found — fill hostname, DNS, or MAC in the table and save.')
+    }
+  }
+
+  const handleLookupMissing = async () => {
+    setError(''); setNotice(''); setLookingUpAll(true)
+    const res = await fetch(`${API_BASE_URL}/api/v1/ipam/addresses/lookup-missing`, { method: 'POST', headers: authHeaders() })
+    const data = await res.json().catch(() => ({}))
+    setLookingUpAll(false)
+    if (!res.ok) { setError(formatApiDetail(data.detail) || 'Lookup failed'); return }
+    setDrafts({})
+    await load()
+    setNotice(`Looked up missing details on ${data.updated ?? 0} of ${data.total ?? 0} addresses. Remaining blanks can be edited in the table.`)
+  }
+
+  const q = filter.trim().toLowerCase()
+  const filtered = q
+    ? ips.filter((i) =>
+        i.address.toLowerCase().includes(q)
+        || (i.hostname ?? '').toLowerCase().includes(q)
+        || (i.dns_name ?? '').toLowerCase().includes(q)
+        || (i.mac_address ?? '').toLowerCase().includes(q))
+    : ips
 
   return (
     <section className="space-y-6">
       <PageHeader
         title="Addresses"
-        description="Host assignments, reservations, and scan-discovered IPs."
+        description="Scan, reverse DNS, ARP, DHCP, inventory, and DNS records fill hostname, DNS name, and MAC when they are known. Anything still blank can be typed in the table and saved."
         actions={
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by IP or hostname" className={`${fieldClass} max-w-xs`} />
+          <>
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by IP, hostname, DNS, or MAC" className={`${fieldClass} max-w-xs`} />
+            <button type="button" onClick={() => void handleLookupMissing()} disabled={lookingUpAll} className={btnSecondary}>
+              {lookingUpAll ? 'Looking up…' : 'Lookup missing'}
+            </button>
+          </>
         }
       />
       <form onSubmit={handleSubmit} className="grid gap-4 rounded-xl border border-white/10 bg-[#151b24] p-5 md:grid-cols-2 xl:grid-cols-3">
         <div><label className="mb-2 block text-sm font-medium text-slate-200">IP Address</label><input value={address} onChange={(e) => setAddress(e.target.value)} required className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
         <div><label className="mb-2 block text-sm font-medium text-slate-200">Subnet</label><select value={subnetId} onChange={(e) => setSubnetId(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"><option value="">— none —</option>{subnets.map((s) => <option key={s.id} value={s.id}>{s.cidr} – {s.name}</option>)}</select></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Hostname</label><input value={hostname} onChange={(e) => setHostname(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">DNS name</label><input value={dnsName} onChange={(e) => setDnsName(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">MAC address</label><input value={mac} onChange={(e) => setMac(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
-        <div><label className="mb-2 block text-sm font-medium text-slate-200">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
-        {error && <p className="md:col-span-2 xl:col-span-3 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</p>}
+        <div><label className="mb-2 block text-sm font-medium text-slate-200">Hostname</label><input value={hostname} onChange={(e) => setHostname(e.target.value)} placeholder="optional" className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-200">DNS name</label><input value={dnsName} onChange={(e) => setDnsName(e.target.value)} placeholder="optional" className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-200">MAC address</label><input value={mac} onChange={(e) => setMac(e.target.value)} placeholder="optional" className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 font-mono text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
+        <div><label className="mb-2 block text-sm font-medium text-slate-200">Description</label><input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="optional" className="w-full rounded-lg border border-white/10 bg-[#0b1220] px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" /></div>
+        {error && <div className="md:col-span-2 xl:col-span-3"><Alert>{error}</Alert></div>}
+        {notice && <div className="md:col-span-2 xl:col-span-3"><Alert tone="success">{notice}</Alert></div>}
         <div className="md:col-span-2 xl:col-span-3 flex justify-end"><button type="submit" className={btnPrimary}>Add address</button></div>
       </form>
       <div className={tableWrapClass}>
         <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
           <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500">
-            <tr><th className="px-4 py-3 font-medium">Address</th><th className="px-4 py-3 font-medium">Hostname</th><th className="px-4 py-3 font-medium">Subnet</th><th className="px-4 py-3 font-medium">MAC</th><th className="px-4 py-3 font-medium">Status</th><th className="px-4 py-3 font-medium">Last seen</th><th className="px-4 py-3" /></tr>
+            <tr>
+              <th className="px-4 py-3 font-medium">Address</th>
+              <th className="px-4 py-3 font-medium">Hostname</th>
+              <th className="px-4 py-3 font-medium">DNS</th>
+              <th className="px-4 py-3 font-medium">MAC</th>
+              <th className="px-4 py-3 font-medium">Description</th>
+              <th className="px-4 py-3 font-medium">Subnet</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Last seen</th>
+              <th className="px-4 py-3" />
+            </tr>
           </thead>
           <tbody className="divide-y divide-slate-800 bg-slate-900/60">
-            {filtered.length === 0 ? <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No IP addresses registered yet. Add subnets and scan them to populate this list.</td></tr>
-              : filtered.map((ip) => (
-                <tr key={ip.id} className="hover:bg-slate-800/50">
-                  <td className="px-4 py-4 font-mono font-semibold text-white">{ip.address}</td>
-                  <td className="px-4 py-4 text-slate-200">{ip.hostname ?? '—'}</td>
-                  <td className="px-4 py-4 font-mono text-slate-300">{subnetLabel(ip.subnet_id)}</td>
-                  <td className="px-4 py-4 font-mono text-slate-300">{ip.mac_address ?? '—'}</td>
-                  <td className="px-4 py-4"><StatusBadge status={ip.status} /></td>
-                  <td className="px-4 py-4 text-slate-400">{ip.last_seen_at ? new Date(ip.last_seen_at).toLocaleString() : '—'}</td>
-                  <td className="px-4 py-4 text-right"><button onClick={() => handleDelete(ip.id)} className={btnDanger}>Delete</button></td>
-                </tr>
-              ))}
+            {filtered.length === 0 ? <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">No IP addresses registered yet. Add subnets and scan them to populate this list.</td></tr>
+              : filtered.map((ip) => {
+                const draft = rowDraft(ip)
+                const dirty = draftIsDirty(ip, draft)
+                return (
+                  <tr key={ip.id} className="hover:bg-slate-800/50">
+                    <td className="px-4 py-3 font-mono font-semibold text-white">{ip.address}</td>
+                    <td className="px-3 py-2"><input value={draft.hostname} onChange={(e) => patchDraft(ip, 'hostname', e.target.value)} placeholder="—" className={cellField} /></td>
+                    <td className="px-3 py-2"><input value={draft.dns_name} onChange={(e) => patchDraft(ip, 'dns_name', e.target.value)} placeholder="—" className={`${cellField} font-mono`} /></td>
+                    <td className="px-3 py-2"><input value={draft.mac_address} onChange={(e) => patchDraft(ip, 'mac_address', e.target.value)} placeholder="—" className={`${cellField} font-mono`} /></td>
+                    <td className="px-3 py-2"><input value={draft.description} onChange={(e) => patchDraft(ip, 'description', e.target.value)} placeholder="—" className={cellField} /></td>
+                    <td className="px-4 py-3 font-mono text-slate-300">{subnetLabel(ip.subnet_id)}</td>
+                    <td className="px-4 py-3"><StatusBadge status={ip.status} /></td>
+                    <td className="px-4 py-3 text-slate-400">{ip.last_seen_at ? new Date(ip.last_seen_at).toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button type="button" onClick={() => void handleLookup(ip)} disabled={lookingUpId === ip.id} className={btnGhost}>
+                          {lookingUpId === ip.id ? 'Lookup…' : 'Lookup'}
+                        </button>
+                        <button type="button" onClick={() => void handleSave(ip)} disabled={!dirty || savingId === ip.id} className={btnSecondary}>
+                          {savingId === ip.id ? 'Saving…' : 'Save'}
+                        </button>
+                        <button type="button" onClick={() => void handleDelete(ip.id)} className={btnDanger}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
           </tbody>
         </table>
       </div>
