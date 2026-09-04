@@ -120,6 +120,23 @@ docker logs nexusops-frontend --tail 40
 
 `localhost` in `VITE_API_BASE_URL` is treated as same-origin: the UI calls `/api` on port 5173 and nginx proxies to the backend. Set `PUBLIC_HOST` to the host DNS/IP so CORS and a non-localhost API URL still match how you open the browser.
 
+**OpenLDAP `File exists` then `startup/slapd failed with status 1`**: the File-exists lines are leftover `/container/run` links from a restart loop. The real failure is often `hostname --fqdn` (osixia’s startup is `bash -e`) when the container has no FQDN. Compose now sets `hostname: ldap.<LDAP_DOMAIN>` and a tmpfs on `/container/run`. Recreate LDAP (keep volumes first):
+
+```bash
+git pull
+docker compose up -d --force-recreate openldap
+docker logs nexusops-ldap --tail 80
+```
+
+If slapd.d was left half-initialized by an earlier crash, wipe **only** the LDAP volumes (not Postgres):
+
+```bash
+docker compose stop openldap
+docker rm -f nexusops-ldap
+docker volume rm nexusops_ldap_data nexusops_ldap_config
+docker compose up -d openldap
+```
+
 **Postgres `postmaster.pid`: Operation not permitted** (older Docker/`libseccomp` + Alpine): compose uses `postgres:16` (Debian). Only if initdb never finished, wipe the empty volume once:
 
 ```bash
