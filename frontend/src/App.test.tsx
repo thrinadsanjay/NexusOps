@@ -33,7 +33,8 @@ describe('NexusOps app shell', () => {
       )
     })
 
-    expect(container.textContent).toContain('Welcome back')
+    expect(container.textContent).toContain('Sign in to NexusOps')
+    expect(container.textContent).toContain('Certificates')
     expect(container.querySelector('input[name="username"]')).not.toBeNull()
     expect(container.querySelector('input[name="password"]')).not.toBeNull()
   })
