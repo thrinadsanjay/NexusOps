@@ -128,6 +128,16 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class AppLog(Base):
+    __tablename__ = "app_logs"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    level: Mapped[str] = Column(String(20), nullable=False, index=True)
+    logger: Mapped[str] = Column(String(120), nullable=False, index=True)
+    message: Mapped[str] = Column(Text, nullable=False)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 – Network / IPAM
 # ---------------------------------------------------------------------------

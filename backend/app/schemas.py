@@ -82,12 +82,48 @@ class AuditLogRead(BaseModel):
     success: bool
     created_at: datetime
     user_id: int | None = None
+    username: str | None = None
 
 
 class SettingsUpdate(BaseModel):
     key: str
     value: str
     description: str | None = None
+
+
+class SettingsGeneralUpdate(BaseModel):
+    app_name: str = Field(min_length=1, max_length=80)
+    app_description: str = Field(min_length=1, max_length=200)
+    theme: str = Field(default="dark", max_length=20)
+
+
+class SettingsGeneralRead(BaseModel):
+    app_name: str
+    app_description: str
+    theme: str
+    environment: str
+
+
+class AppLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    level: str
+    logger: str
+    message: str
+    created_at: datetime
+
+
+class CredentialStatusRead(BaseModel):
+    id: str
+    name: str
+    provider: str
+    category: str
+    status: str
+    summary: str
+    href: str
+    configured: bool
+    planned: bool = False
 
 
 class ApiTokenCreate(BaseModel):
@@ -105,6 +141,13 @@ class ApiTokenRead(BaseModel):
     expires_at: datetime | None = None
     last_used_at: datetime | None = None
     is_active: bool
+
+
+class ApiTokenCreated(BaseModel):
+    token: str
+    name: str
+    prefix: str
+    expires_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
