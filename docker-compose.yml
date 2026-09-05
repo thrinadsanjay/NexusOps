@@ -123,6 +123,9 @@ services:
       - "${SMTP_BIND:-0.0.0.0}:${SMTP_PORT:-25}:2525"
     tmpfs:
       - /tmp:mode=01777
+    volumes:
+      # Optional: lets the dashboard start/stop/restart compose services.
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
     cap_add:
       # ICMP ping for subnet scan. NET_ADMIN is omitted: on Proxmox LXC it
       # often yields PermissionError at process start without helping ping.
