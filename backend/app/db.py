@@ -77,3 +77,34 @@ def create_database() -> None:
     import app.models  # noqa: F401 – register tables on Base.metadata
 
     Base.metadata.create_all(bind=engine)
+    if DATABASE_URL.startswith("sqlite"):
+        _sqlite_add_missing_columns()
+
+
+def _sqlite_add_missing_columns() -> None:
+    """create_all will not ALTER existing SQLite tables used by pytest."""
+    from sqlalchemy import inspect, text
+
+    wanted = {
+        "dns_zones": {
+            "cloud_account_id": "INTEGER",
+            "cloudflare_zone_id": "VARCHAR(64)",
+            "last_sync_at": "DATETIME",
+            "last_sync_direction": "VARCHAR(20)",
+            "last_sync_status": "VARCHAR(40)",
+            "last_sync_error": "TEXT",
+        },
+        "dns_records": {
+            "cloudflare_record_id": "VARCHAR(64)",
+        },
+    }
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    with engine.begin() as conn:
+        for table, columns in wanted.items():
+            if table not in tables:
+                continue
+            existing = {col["name"] for col in inspector.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))

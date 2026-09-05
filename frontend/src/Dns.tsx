@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import { API_BASE_URL } from './apiBase'
-import { PageHeader, btnDanger, btnPrimary, btnSecondary, cardClass, fieldClass, labelClass, tableWrapClass } from './ui'
+import { Alert, PageHeader, btnDanger, btnPrimary, btnSecondary, cardClass, fieldClass, labelClass, tableWrapClass } from './ui'
 
 function authHeaders() {
   const token = localStorage.getItem('nexusops_token') ?? ''
@@ -17,8 +17,19 @@ export type DnsRecord = {
 export type DnsZone = {
   id: number; name: string; kind: string; description: string | null
   default_ttl: number; status: string; records: DnsRecord[]
+  cloud_account_id: number | null
+  cloudflare_zone_id: string | null
+  last_sync_at: string | null
+  last_sync_direction: string | null
+  last_sync_status: string | null
+  last_sync_error: string | null
   created_at: string; updated_at: string
 }
+export type DnsCloudAccount = {
+  id: number; name: string; provider: string; has_token: boolean
+  last_test_status: string | null; last_test_error: string | null
+}
+export type DnsCloudZone = { id: string; name: string; status: string; imported: boolean }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,9 +90,30 @@ export function DnsOverview() {
   const [recComment, setRecComment] = useState('')
   const [recError, setRecError] = useState('')
 
+  const [cfAccounts, setCfAccounts] = useState<DnsCloudAccount[]>([])
+  const [cfZones, setCfZones] = useState<DnsCloudZone[]>([])
+  const [cfName, setCfName] = useState('Cloudflare')
+  const [cfToken, setCfToken] = useState('')
+  const [cfErr, setCfErr] = useState('')
+  const [cfNotice, setCfNotice] = useState('')
+  const [cfBusy, setCfBusy] = useState(false)
+
   const loadZones = useCallback(() => {
     fetch(`${API_BASE_URL}/api/v1/dns/zones`, { headers: authHeaders() })
       .then((r) => r.json()).then(setZones).catch(() => undefined)
+  }, [])
+
+  const loadCf = useCallback(() => {
+    fetch(`${API_BASE_URL}/api/v1/dns/cloudflare/accounts`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : []
+        setCfAccounts(list)
+        const first = list[0]
+        if (!first) { setCfZones([]); return }
+        fetch(`${API_BASE_URL}/api/v1/dns/cloudflare/accounts/${first.id}/zones`, { headers: authHeaders() })
+          .then((zr) => zr.json()).then((zones) => setCfZones(Array.isArray(zones) ? zones : [])).catch(() => setCfZones([]))
+      }).catch(() => undefined)
   }, [])
 
   const loadRecords = useCallback((zoneId: number) => {
@@ -89,7 +121,7 @@ export function DnsOverview() {
       .then((r) => r.json()).then(setRecords).catch(() => undefined)
   }, [])
 
-  useEffect(() => { loadZones() }, [loadZones])
+  useEffect(() => { loadZones(); loadCf() }, [loadZones, loadCf])
 
   useEffect(() => {
     if (selectedZone) loadRecords(selectedZone.id)
@@ -138,6 +170,59 @@ export function DnsOverview() {
     if (r.ok || r.status === 204) setRecords((p) => p.filter((rec) => rec.id !== recId))
   }
 
+  const account = cfAccounts[0]
+
+  const saveCloudflare = async (e: FormEvent) => {
+    e.preventDefault(); setCfErr(''); setCfNotice('')
+    if (!cfToken.trim()) { setCfErr('Paste a Cloudflare API token with Zone.DNS Read and Edit'); return }
+    setCfBusy(true)
+    const r = await fetch(`${API_BASE_URL}/api/v1/dns/cloudflare/accounts${account ? `/${account.id}` : ''}`, {
+      method: account ? 'PATCH' : 'POST', headers: authHeaders(),
+      body: JSON.stringify({ name: cfName || 'Cloudflare', api_token: cfToken.trim() }),
+    })
+    const data = await r.json().catch(() => ({}))
+    setCfBusy(false)
+    if (!r.ok) { setCfErr(typeof data.detail === 'string' ? data.detail : 'Cloudflare token was rejected'); return }
+    setCfToken('')
+    setCfNotice('Token saved on the server. It is not shown again.')
+    loadCf(); loadZones()
+  }
+
+  const importCfZone = async (zoneId: string) => {
+    if (!account) return
+    setCfBusy(true); setCfErr(''); setCfNotice('')
+    const r = await fetch(`${API_BASE_URL}/api/v1/dns/cloudflare/accounts/${account.id}/import`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ cloudflare_zone_id: zoneId }),
+    })
+    const data = await r.json().catch(() => ({}))
+    setCfBusy(false)
+    if (!r.ok) { setCfErr(typeof data.detail === 'string' ? data.detail : 'Import failed'); return }
+    setCfNotice(`Imported ${data.name}`)
+    loadZones(); loadCf()
+    if (data.id) { setSelectedZone(data); loadRecords(data.id) }
+  }
+
+  const syncZone = async (direction: 'pull' | 'push') => {
+    if (!selectedZone) return
+    setCfBusy(true); setCfErr(''); setCfNotice('')
+    let zoneId = selectedZone.id
+    if (!selectedZone.cloudflare_zone_id && account) {
+      const link = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${selectedZone.id}/cloudflare/link`, {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify({ account_id: account.id }),
+      })
+      const linked = await link.json().catch(() => ({}))
+      if (!link.ok) { setCfBusy(false); setCfErr(typeof linked.detail === 'string' ? linked.detail : 'Could not link zone'); return }
+      setSelectedZone(linked)
+      zoneId = linked.id
+    }
+    const r = await fetch(`${API_BASE_URL}/api/v1/dns/zones/${zoneId}/cloudflare/${direction}`, { method: 'POST', headers: authHeaders() })
+    const data = await r.json().catch(() => ({}))
+    setCfBusy(false)
+    if (!r.ok) { setCfErr(typeof data.detail === 'string' ? data.detail : 'Sync failed'); return }
+    setCfNotice(data.message || `${direction} finished (${data.created} new, ${data.updated} updated)`)
+    loadZones(); loadRecords(zoneId)
+  }
+
   const handleImport = async () => {
     if (!selectedZone || selectedZone.kind !== 'forward') return
     setImporting(true); setImportMsg('')
@@ -164,7 +249,29 @@ export function DnsOverview() {
 
   return (
     <section className="space-y-6">
-      <PageHeader title="DNS" description="Zones and records for internal name resolution." />
+      <PageHeader title="DNS" description="Local zones and optional Cloudflare sync. The API token stays on the server and is never returned to the browser." />
+
+      <form onSubmit={saveCloudflare} className={`${card} grid gap-3 md:grid-cols-[1fr_1fr_auto]`}>
+        <div className="md:col-span-2 xl:col-span-3 text-sm text-slate-300">
+          Connect Cloudflare with a token scoped to <span className="text-white">Zone → DNS → Read</span> and <span className="text-white">Edit</span> (and Zone → Zone → Read). NexusOps encrypts it at rest.
+        </div>
+        <div><label className={label}>Account name</label><input value={cfName} onChange={(e) => setCfName(e.target.value)} className={input} /></div>
+        <div><label className={label}>{account?.has_token ? 'Replace API token' : 'Cloudflare API token'}</label>
+          <input type="password" value={cfToken} onChange={(e) => setCfToken(e.target.value)} autoComplete="off" placeholder={account?.has_token ? '••••••••  (saved, encrypted)' : 'Create token at dash.cloudflare.com'} className={input} />
+        </div>
+        <div className="flex items-end"><button type="submit" disabled={cfBusy} className={btnPrimary}>{account ? 'Update token' : 'Save token'}</button></div>
+        {cfErr && <div className="md:col-span-3"><Alert>{cfErr}</Alert></div>}
+        {cfNotice && <div className="md:col-span-3"><Alert tone="success">{cfNotice}</Alert></div>}
+        {cfZones.length > 0 && (
+          <div className="md:col-span-3 flex flex-wrap gap-2">
+            {cfZones.map((z) => (
+              <button key={z.id} type="button" disabled={cfBusy || z.imported} onClick={() => void importCfZone(z.id)} className={btnSecondary + ' text-xs'}>
+                {z.imported ? `${z.name} (local)` : `Import ${z.name}`}
+              </button>
+            ))}
+          </div>
+        )}
+      </form>
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* zone list */}
@@ -203,7 +310,8 @@ export function DnsOverview() {
                 </div>
                 <div className="mt-1 flex items-center gap-2">
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_BADGE[z.status] ?? 'bg-slate-700 text-slate-300'}`}>{z.status}</span>
-                  <span className="text-[11px] text-slate-400">{z.kind} · {z.records.length} records</span>
+                  <span className="text-[11px] text-slate-400">{z.kind} · {(z.records ?? []).length} records</span>
+                  {z.cloudflare_zone_id && <span className="rounded-md bg-orange-500/15 px-2 py-0.5 text-[10px] text-orange-300">Cloudflare</span>}
                 </div>
               </button>
             ))}
@@ -219,9 +327,18 @@ export function DnsOverview() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="font-mono text-xl font-bold text-white">{selectedZone.name}</h3>
-                  <p className="mt-0.5 text-xs text-slate-400">TTL default: {selectedZone.default_ttl}s · {selectedZone.kind} zone · {records.length} records</p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    TTL default: {selectedZone.default_ttl}s · {selectedZone.kind} zone · {records.length} records
+                    {selectedZone.last_sync_at ? ` · last ${selectedZone.last_sync_direction || 'sync'} ${selectedZone.last_sync_status || ''}` : ''}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {account && (
+                    <>
+                      <button type="button" disabled={cfBusy} onClick={() => void syncZone('pull')} className={btnSecondary + ' text-xs'}>{cfBusy ? 'Syncing…' : '↓ Pull from Cloudflare'}</button>
+                      <button type="button" disabled={cfBusy} onClick={() => void syncZone('push')} className={btnSecondary + ' text-xs'}>↑ Push to Cloudflare</button>
+                    </>
+                  )}
                   {selectedZone.kind === 'forward' && (
                     <button onClick={handleImport} disabled={importing} className={btnSecondary + ' text-xs'}>
                       {importing ? 'Importing…' : '⟳ Import A from IPAM'}

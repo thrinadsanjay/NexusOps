@@ -12,6 +12,7 @@ from app.api.v1.router import router as v1_router
 from app.modules.ipam import router as ipam_router
 from app.modules.inventory import router as inventory_router
 from app.modules.dns import router as dns_router
+from app.modules.dns_cloudflare import router as dns_cloudflare_router
 from app.modules.dhcp import router as dhcp_router
 from app.modules.dashboard import router as dashboard_router
 from app.modules.pki import router as pki_router
@@ -85,6 +86,7 @@ app.include_router(v1_router)
 app.include_router(ipam_router)
 app.include_router(inventory_router)
 app.include_router(dns_router)
+app.include_router(dns_cloudflare_router)
 app.include_router(dhcp_router)
 app.include_router(dashboard_router)
 app.include_router(pki_router)

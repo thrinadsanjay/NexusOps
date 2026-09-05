@@ -334,6 +334,7 @@ class DnsRecordRead(BaseModel):
     ttl: int | None = None
     priority: int | None = None
     comment: str | None = None
+    cloudflare_record_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -360,9 +361,64 @@ class DnsZoneRead(BaseModel):
     description: str | None = None
     default_ttl: int
     status: str
+    cloud_account_id: int | None = None
+    cloudflare_zone_id: str | None = None
+    last_sync_at: datetime | None = None
+    last_sync_direction: str | None = None
+    last_sync_status: str | None = None
+    last_sync_error: str | None = None
     created_at: datetime
     updated_at: datetime
     records: list[DnsRecordRead] = []
+
+
+class DnsCloudAccountCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    api_token: str = Field(min_length=8, max_length=255)
+
+
+class DnsCloudAccountUpdate(BaseModel):
+    name: str | None = None
+    api_token: str | None = None
+
+
+class DnsCloudAccountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    provider: str
+    has_token: bool = False
+    last_test_at: datetime | None = None
+    last_test_status: str | None = None
+    last_test_error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DnsCloudZoneRead(BaseModel):
+    id: str
+    name: str
+    status: str
+    imported: bool = False
+
+
+class DnsCloudImportRequest(BaseModel):
+    cloudflare_zone_id: str | None = None
+    zone_name: str | None = None
+
+
+class DnsCloudLinkRequest(BaseModel):
+    account_id: int
+    cloudflare_zone_id: str | None = None
+
+
+class DnsSyncResult(BaseModel):
+    direction: str
+    created: int
+    updated: int
+    unchanged: int
+    errors: list[str] = []
+    message: str
 
 
 # ---------------------------------------------------------------------------

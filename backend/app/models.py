@@ -251,6 +251,22 @@ class Host(Base):
 # Phase 4 – DNS Management
 # ---------------------------------------------------------------------------
 
+class DnsCloudAccount(Base):
+    __tablename__ = "dns_cloud_accounts"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = Column(String(120), nullable=False)
+    provider: Mapped[str] = Column(String(40), default="cloudflare", nullable=False)
+    token_encrypted: Mapped[str] = Column(Text, nullable=False)
+    last_test_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
+    last_test_status: Mapped[str | None] = Column(String(40), nullable=True)
+    last_test_error: Mapped[str | None] = Column(Text, nullable=True)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    zones: Mapped[list["DnsZone"]] = relationship("DnsZone", back_populates="cloud_account")
+
+
 class DnsZone(Base):
     __tablename__ = "dns_zones"
 
@@ -260,10 +276,17 @@ class DnsZone(Base):
     description: Mapped[str | None] = Column(String(255), nullable=True)
     default_ttl: Mapped[int] = Column(Integer, default=300, nullable=False)
     status: Mapped[str] = Column(String(40), default="active", nullable=False)
+    cloud_account_id: Mapped[int | None] = Column(ForeignKey("dns_cloud_accounts.id"), nullable=True, index=True)
+    cloudflare_zone_id: Mapped[str | None] = Column(String(64), nullable=True)
+    last_sync_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
+    last_sync_direction: Mapped[str | None] = Column(String(20), nullable=True)
+    last_sync_status: Mapped[str | None] = Column(String(40), nullable=True)
+    last_sync_error: Mapped[str | None] = Column(Text, nullable=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     records: Mapped[list["DnsRecord"]] = relationship("DnsRecord", back_populates="zone", cascade="all, delete-orphan")
+    cloud_account: Mapped["DnsCloudAccount | None"] = relationship("DnsCloudAccount", back_populates="zones")
 
 
 class DnsRecord(Base):
@@ -277,6 +300,7 @@ class DnsRecord(Base):
     ttl: Mapped[int | None] = Column(Integer, nullable=True)               # None → use zone default
     priority: Mapped[int | None] = Column(Integer, nullable=True)          # MX / SRV priority
     comment: Mapped[str | None] = Column(String(255), nullable=True)
+    cloudflare_record_id: Mapped[str | None] = Column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
