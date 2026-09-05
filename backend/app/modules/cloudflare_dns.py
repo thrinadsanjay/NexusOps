@@ -14,11 +14,24 @@ from app.core.config import settings
 
 CF_API = "https://api.cloudflare.com/client/v4"
 SKIP_TYPES = {"NS", "SOA"}
+# BOM / zero-width characters that survive a dashboard copy-paste.
+_INVISIBLE = dict.fromkeys(map(ord, "\ufeff\u200b\u200c\u200d\u2060"), None)
 logger = logging.getLogger("nexusops.dns")
 
 
 class CloudflareError(Exception):
     pass
+
+
+def normalize_cloudflare_token(raw: str) -> str:
+    """Turn a dashboard paste into the bearer secret Cloudflare expects."""
+    token = (raw or "").translate(_INVISIBLE).strip()
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'}:
+        token = token[1:-1].translate(_INVISIBLE).strip()
+    token = "".join(token.split())
+    if token.lower().startswith("bearer"):
+        token = token[6:].lstrip(":").lstrip()
+    return token
 
 
 def _fernet() -> Fernet:
@@ -27,7 +40,7 @@ def _fernet() -> Fernet:
 
 
 def encrypt_token(token: str) -> str:
-    return _fernet().encrypt(token.encode()).decode()
+    return _fernet().encrypt(normalize_cloudflare_token(token).encode()).decode()
 
 
 def decrypt_token(blob: str) -> str:
@@ -37,8 +50,23 @@ def decrypt_token(blob: str) -> str:
         raise CloudflareError("Cloudflare token cannot be decrypted. Save the token again.") from exc
 
 
+def _auth_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {normalize_cloudflare_token(token)}",
+        "Accept": "application/json",
+    }
+
+
 def _headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    return {**_auth_headers(token), "Content-Type": "application/json"}
+
+
+def _parse_body(response: httpx.Response) -> dict:
+    try:
+        body = response.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
 
 
 def _problem(body: dict, response: httpx.Response) -> str:
@@ -46,6 +74,17 @@ def _problem(body: dict, response: httpx.Response) -> str:
     if errors:
         return str(errors[0].get("message") or response.text)
     return response.text or f"Cloudflare HTTP {response.status_code}"
+
+
+def _verify_error(body: dict, response: httpx.Response) -> str:
+    message = _problem(body, response)
+    if "invalid api token" in message.lower():
+        return (
+            "Cloudflare rejected this API token. Paste only the token string, "
+            "no quotes. It needs Zone → Zone → Read and Zone → DNS → Read and Edit "
+            "for the zone you want to sync."
+        )
+    return message
 
 
 @dataclass
@@ -67,12 +106,22 @@ class CfRecord:
 
 
 def verify_token(token: str) -> dict:
+    token = normalize_cloudflare_token(token)
+    if len(token) < 8:
+        raise CloudflareError("Cloudflare API token is missing or too short")
+    headers = _auth_headers(token)
     with httpx.Client(timeout=20) as client:
-        response = client.get(f"{CF_API}/user/tokens/verify", headers=_headers(token))
-        body = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
-        if response.status_code != 200 or not body.get("success"):
-            raise CloudflareError(_problem(body if isinstance(body, dict) else {}, response))
-        return {"status": "ok", "message": "Cloudflare token is valid"}
+        verify = client.get(f"{CF_API}/user/tokens/verify", headers=headers)
+        verify_body = _parse_body(verify)
+        if verify.status_code == 200 and verify_body.get("success"):
+            return {"status": "ok", "message": "Cloudflare token is valid"}
+        # Account-scoped tokens often fail /user/tokens/verify even when they
+        # can list zones, which is what NexusOps actually needs.
+        zones = client.get(f"{CF_API}/zones", params={"page": 1, "per_page": 1}, headers=headers)
+        zones_body = _parse_body(zones)
+        if zones.status_code == 200 and zones_body.get("success"):
+            return {"status": "ok", "message": "Cloudflare token can list zones"}
+        raise CloudflareError(_verify_error(verify_body or zones_body, verify if verify.status_code >= 400 else zones))
 
 
 def list_zones(token: str) -> list[CfZone]:
@@ -83,7 +132,7 @@ def list_zones(token: str) -> list[CfZone]:
             response = client.get(
                 f"{CF_API}/zones",
                 params={"page": page, "per_page": 50},
-                headers=_headers(token),
+                headers=_auth_headers(token),
             )
             body = response.json()
             if response.status_code != 200 or not body.get("success"):
@@ -113,7 +162,7 @@ def list_records(token: str, zone_id: str) -> list[CfRecord]:
             response = client.get(
                 f"{CF_API}/zones/{zone_id}/dns_records",
                 params={"page": page, "per_page": 100},
-                headers=_headers(token),
+                headers=_auth_headers(token),
             )
             body = response.json()
             if response.status_code != 200 or not body.get("success"):

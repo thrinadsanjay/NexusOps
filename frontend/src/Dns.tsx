@@ -61,6 +61,16 @@ const card = cardClass
 
 const RECORD_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'PTR', 'NS', 'SRV', 'SOA', 'CAA']
 
+function normalizeCfToken(raw: string): string {
+  let token = raw.replace(/[\uFEFF\u200B\u200C\u200D\u2060]/g, '').trim()
+  if (token.length >= 2 && token[0] === token[token.length - 1] && (token[0] === '"' || token[0] === "'")) {
+    token = token.slice(1, -1).trim()
+  }
+  token = token.replace(/\s+/g, '')
+  if (/^bearer/i.test(token)) token = token.replace(/^bearer[:\s]*/i, '')
+  return token
+}
+
 // ── DNS overview ────────────────────────────────────────────────────────────
 
 export function DnsOverview() {
@@ -174,11 +184,12 @@ export function DnsOverview() {
 
   const saveCloudflare = async (e: FormEvent) => {
     e.preventDefault(); setCfErr(''); setCfNotice('')
-    if (!cfToken.trim()) { setCfErr('Paste a Cloudflare API token with Zone.DNS Read and Edit'); return }
+    const token = normalizeCfToken(cfToken)
+    if (!token) { setCfErr('Paste a Cloudflare API token with Zone.DNS Read and Edit'); return }
     setCfBusy(true)
     const r = await fetch(`${API_BASE_URL}/api/v1/dns/cloudflare/accounts${account ? `/${account.id}` : ''}`, {
       method: account ? 'PATCH' : 'POST', headers: authHeaders(),
-      body: JSON.stringify({ name: cfName || 'Cloudflare', api_token: cfToken.trim() }),
+      body: JSON.stringify({ name: cfName || 'Cloudflare', api_token: token }),
     })
     const data = await r.json().catch(() => ({}))
     setCfBusy(false)
@@ -256,8 +267,23 @@ export function DnsOverview() {
           Connect Cloudflare with a token scoped to <span className="text-white">Zone → DNS → Read</span> and <span className="text-white">Edit</span> (and Zone → Zone → Read). NexusOps encrypts it at rest.
         </div>
         <div><label className={label}>Account name</label><input value={cfName} onChange={(e) => setCfName(e.target.value)} className={input} /></div>
-        <div><label className={label}>{account?.has_token ? 'Replace API token' : 'Cloudflare API token'}</label>
-          <input type="password" value={cfToken} onChange={(e) => setCfToken(e.target.value)} autoComplete="off" placeholder={account?.has_token ? '••••••••  (saved, encrypted)' : 'Create token at dash.cloudflare.com'} className={input} />
+        <div>
+          <label className={label}>{account?.has_token ? 'Replace API token' : 'Cloudflare API token'}</label>
+          <input
+            type="text"
+            name="nexusops-cloudflare-api-token"
+            value={cfToken}
+            onChange={(e) => setCfToken(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
+            placeholder={account?.has_token ? 'Paste a new token to replace the saved one' : 'Paste the token only — no quotes'}
+            className={input + ' font-mono'}
+          />
         </div>
         <div className="flex items-end"><button type="submit" disabled={cfBusy} className={btnPrimary}>{account ? 'Update token' : 'Save token'}</button></div>
         {cfErr && <div className="md:col-span-3"><Alert>{cfErr}</Alert></div>}

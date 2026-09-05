@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class TokenData(BaseModel):
@@ -374,12 +374,36 @@ class DnsZoneRead(BaseModel):
 
 class DnsCloudAccountCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    api_token: str = Field(min_length=8, max_length=255)
+    api_token: str = Field(min_length=8, max_length=4096)
+
+    @field_validator("api_token")
+    @classmethod
+    def _normalize_api_token(cls, value: str) -> str:
+        from app.modules.cloudflare_dns import normalize_cloudflare_token
+
+        token = normalize_cloudflare_token(value)
+        if len(token) < 8:
+            raise ValueError("Cloudflare API token is missing or too short")
+        return token
 
 
 class DnsCloudAccountUpdate(BaseModel):
     name: str | None = None
-    api_token: str | None = None
+    api_token: str | None = Field(default=None, min_length=8, max_length=4096)
+
+    @field_validator("api_token")
+    @classmethod
+    def _normalize_api_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from app.modules.cloudflare_dns import normalize_cloudflare_token
+
+        token = normalize_cloudflare_token(value)
+        if not token:
+            return None
+        if len(token) < 8:
+            raise ValueError("Cloudflare API token is missing or too short")
+        return token
 
 
 class DnsCloudAccountRead(BaseModel):

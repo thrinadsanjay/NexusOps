@@ -18,6 +18,7 @@ from app.modules.cloudflare_dns import (
     find_zone,
     list_records,
     list_zones,
+    normalize_cloudflare_token,
     relative_name,
     upsert_record,
     verify_token,
@@ -66,7 +67,7 @@ def create_account(
     db: Session = Depends(get_db),
     _: object = Depends(require_permission("dns:write")),
 ) -> DnsCloudAccountRead:
-    token = payload.api_token.strip()
+    token = normalize_cloudflare_token(payload.api_token)
     try:
         verify_token(token)
     except CloudflareError as exc:
@@ -95,7 +96,7 @@ def update_account(
     if payload.name:
         account.name = payload.name.strip()
     if payload.api_token:
-        token = payload.api_token.strip()
+        token = normalize_cloudflare_token(payload.api_token)
         try:
             verify_token(token)
         except CloudflareError as exc:

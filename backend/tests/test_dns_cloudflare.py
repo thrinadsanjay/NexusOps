@@ -3,7 +3,15 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.modules.cloudflare_dns import CfRecord, CfZone, encrypt_token, relative_name
+from app.modules.cloudflare_dns import (
+    CfRecord,
+    CfZone,
+    CloudflareError,
+    encrypt_token,
+    normalize_cloudflare_token,
+    relative_name,
+    verify_token,
+)
 
 
 def test_relative_name() -> None:
@@ -111,3 +119,63 @@ def test_encrypt_token_is_not_plaintext() -> None:
     blob = encrypt_token("cf-secret-token-value")
     assert blob != "cf-secret-token-value"
     assert "cf-secret-token-value" not in blob
+
+
+def test_normalize_cloudflare_token_strips_paste_junk() -> None:
+    raw = '\ufeff "Bearer  abc-TOKEN-123  \n" \u200b'
+    assert normalize_cloudflare_token(raw) == "abc-TOKEN-123"
+    assert normalize_cloudflare_token("  'cf-secret-token-value'  ") == "cf-secret-token-value"
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int, body: dict) -> None:
+        self.status_code = status_code
+        self._body = body
+        self.text = ""
+        self.headers = {"content-type": "application/json; charset=utf-8"}
+
+    def json(self) -> dict:
+        return self._body
+
+
+def test_verify_token_falls_back_to_listing_zones() -> None:
+    with patch("app.modules.cloudflare_dns.httpx.Client") as client_cls:
+        client = client_cls.return_value.__enter__.return_value
+        client.get.side_effect = [
+            _FakeResponse(401, {"success": False, "errors": [{"message": "Invalid API Token"}]}),
+            _FakeResponse(200, {"success": True, "result": []}),
+        ]
+        out = verify_token('  "cf-real-token-value"  ')
+        assert out["status"] == "ok"
+        first_headers = client.get.call_args_list[0].kwargs["headers"]
+        assert first_headers["Authorization"] == "Bearer cf-real-token-value"
+        assert "Content-Type" not in first_headers
+
+
+def test_verify_token_explains_invalid_paste() -> None:
+    with patch("app.modules.cloudflare_dns.httpx.Client") as client_cls:
+        client = client_cls.return_value.__enter__.return_value
+        client.get.side_effect = [
+            _FakeResponse(401, {"success": False, "errors": [{"message": "Invalid API Token"}]}),
+            _FakeResponse(401, {"success": False, "errors": [{"message": "Invalid API Token"}]}),
+        ]
+        try:
+            verify_token("not-a-real-token")
+        except CloudflareError as exc:
+            assert "Paste only the token string" in str(exc)
+        else:
+            raise AssertionError("expected CloudflareError")
+
+
+def test_create_account_normalizes_quoted_token() -> None:
+    client = TestClient(app)
+    headers = _auth()
+    with patch("app.modules.dns_cloudflare.verify_token", return_value={"status": "ok", "message": "ok"}) as verify:
+        created = client.post(
+            "/api/v1/dns/cloudflare/accounts",
+            headers=headers,
+            json={"name": "Quoted paste", "api_token": '  "cf-secret-token-value"  '},
+        )
+    assert created.status_code == 201, created.text
+    verify.assert_called_once_with("cf-secret-token-value")
+    assert "cf-secret-token-value" not in created.text
