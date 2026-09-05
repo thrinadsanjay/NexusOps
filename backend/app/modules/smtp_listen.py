@@ -95,9 +95,9 @@ class RelayHandler:
             db.close()
 
 
-def start_listener() -> None:
+def start_listener(force: bool = False) -> None:
     global _controller
-    if not settings.smtp_listen_enable:
+    if not settings.smtp_listen_enable and not force:
         return
     if _controller is not None:
         return
