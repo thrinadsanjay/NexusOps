@@ -8,6 +8,7 @@ import { DnsOverview } from './Dns'
 import { DhcpPanel } from './Dhcp'
 import { PkiPanel } from './Pki'
 import { LdapPanel } from './Ldap'
+import { SmtpPanel } from './Smtp'
 import { ToolsPanel } from './Tools'
 import { Login } from './Login'
 import { Badge, KpiCard, PageHeader, btnSecondary, cardClass, fieldClass, tableWrapClass } from './ui'
@@ -326,6 +327,7 @@ function App() {
       <Route path="/dhcp" element={isAuthenticated ? <DhcpPanel /> : <Navigate to="/login" replace />} />
       <Route path="/pki" element={isAuthenticated ? <PkiPanel /> : <Navigate to="/login" replace />} />
       <Route path="/ldap" element={isAuthenticated ? <LdapPanel /> : <Navigate to="/login" replace />} />
+      <Route path="/smtp" element={isAuthenticated ? <SmtpPanel /> : <Navigate to="/login" replace />} />
       <Route path="/tools" element={isAuthenticated ? <ToolsPanel /> : <Navigate to="/login" replace />} />
       <Route
         path="/settings"

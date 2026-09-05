@@ -28,6 +28,8 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
         "pki:write": "Create and manage certificates and CAs",
         "ldap:read": "Read LDAP server configurations and sync logs",
         "ldap:write": "Manage LDAP servers and trigger directory syncs",
+        "smtp:read": "Read SMTP relays and message log",
+        "smtp:write": "Manage SMTP relays and send mail",
     }
 
     for permission_name, description in default_permissions.items():
@@ -57,9 +59,11 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
             "pki:write",
             "ldap:read",
             "ldap:write",
+            "smtp:read",
+            "smtp:write",
         ],
-        "operator": ["users:read", "settings:read", "audit:read", "ipam:read", "ipam:write", "inventory:read", "inventory:write", "dns:read", "dns:write", "dhcp:read", "dhcp:write", "pki:read", "pki:write", "ldap:read", "ldap:write"],
-        "viewer": ["users:read", "settings:read", "ipam:read", "inventory:read", "dns:read", "dhcp:read", "pki:read", "ldap:read"],
+        "operator": ["users:read", "settings:read", "audit:read", "ipam:read", "ipam:write", "inventory:read", "inventory:write", "dns:read", "dns:write", "dhcp:read", "dhcp:write", "pki:read", "pki:write", "ldap:read", "ldap:write", "smtp:read", "smtp:write"],
+        "viewer": ["users:read", "settings:read", "ipam:read", "inventory:read", "dns:read", "dhcp:read", "pki:read", "ldap:read", "smtp:read"],
     }
 
     for role_name, permission_names in default_roles.items():

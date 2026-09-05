@@ -658,3 +658,83 @@ class LdapSyncLogRead(BaseModel):
     error_message: str | None = None
     started_at: datetime
     finished_at: datetime | None = None
+
+
+class SmtpRelayCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    provider: str = "custom"
+    host: str | None = None
+    port: int | None = None
+    encryption: str | None = None
+    username: str | None = None
+    password: str | None = None
+    from_address: str = Field(min_length=1, max_length=255)
+    allowed_networks: str | None = None
+    is_default: bool = False
+    enabled: bool = True
+    notes: str | None = None
+
+
+class SmtpRelayUpdate(BaseModel):
+    name: str | None = None
+    provider: str | None = None
+    host: str | None = None
+    port: int | None = None
+    encryption: str | None = None
+    username: str | None = None
+    password: str | None = None
+    from_address: str | None = None
+    allowed_networks: str | None = None
+    is_default: bool | None = None
+    enabled: bool | None = None
+    notes: str | None = None
+
+
+class SmtpRelayRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    provider: str
+    host: str
+    port: int
+    encryption: str
+    username: str | None = None
+    has_password: bool = False
+    from_address: str
+    allowed_networks: str
+    is_default: bool
+    enabled: bool
+    last_test_at: datetime | None = None
+    last_test_status: str | None = None
+    last_test_error: str | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SmtpSendRequest(BaseModel):
+    to: str = Field(min_length=1)
+    subject: str = "NexusOps test message"
+    body: str = "This is a test message from the NexusOps SMTP relay."
+
+
+class SmtpMessageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    relay_id: int | None = None
+    direction: str
+    sender: str
+    recipients: str
+    subject: str | None = None
+    status: str
+    error_message: str | None = None
+    created_at: datetime
+
+
+class SmtpStatusRead(BaseModel):
+    listening: bool
+    listen_host: str
+    listen_port: int
+    published_port: int | None = None
+    default_relay: str | None = None
+    default_smart_host: str | None = None

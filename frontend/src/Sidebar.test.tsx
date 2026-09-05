@@ -13,6 +13,7 @@ describe('enterprise navigation', () => {
     expect(labels).toContain('Network')
     expect(labels).toContain('Directory')
     expect(labels).toContain('Integrations')
+    expect(labels).toContain('Mail')
   })
 
   it('labels nested infrastructure pages for the top bar', () => {

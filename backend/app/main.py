@@ -16,6 +16,7 @@ from app.modules.dhcp import router as dhcp_router
 from app.modules.dashboard import router as dashboard_router
 from app.modules.pki import router as pki_router
 from app.modules.ldap_module import router as ldap_router
+from app.modules.smtp import router as smtp_router
 from app.core.bootstrap import ensure_admin_user, ensure_bundled_ldap_server
 from app.core.config import settings
 from app.db import create_database, get_db, redact_database_url, DATABASE_URL
@@ -54,7 +55,13 @@ async def lifespan(_app: FastAPI):
             redact_database_url(DATABASE_URL),
         )
         raise
-    yield
+    from app.modules.smtp_listen import start_listener, stop_listener
+
+    start_listener()
+    try:
+        yield
+    finally:
+        stop_listener()
 
 
 app = FastAPI(
@@ -82,6 +89,7 @@ app.include_router(dhcp_router)
 app.include_router(dashboard_router)
 app.include_router(pki_router)
 app.include_router(ldap_router)
+app.include_router(smtp_router)
 
 
 @app.get("/.well-known/acme-challenge/{token}")

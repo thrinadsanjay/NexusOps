@@ -34,6 +34,7 @@ export const navSections: NavSection[] = [
       },
       { label: 'DNS', to: '/dns' },
       { label: 'DHCP', to: '/dhcp' },
+      { label: 'Mail', to: '/smtp' },
     ],
   },
   {

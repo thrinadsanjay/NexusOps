@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     ldap_admin_password: str = Field(default="NexusOps2024!")
     ldap_domain: str = Field(default="homelab.local")
     ldap_base_dn: str = Field(default="dc=homelab,dc=local")
+    smtp_listen_enable: bool = Field(default=False)
+    smtp_listen_host: str = Field(default="0.0.0.0")
+    smtp_listen_port: int = Field(default=2525)
+    smtp_published_port: int = Field(default=25)
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -46,6 +46,10 @@ x-backend-environment: &backend-environment
   LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:-NexusOps2024!}
   LDAP_DOMAIN: ${LDAP_DOMAIN:-homelab.local}
   LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=homelab,dc=local}
+  SMTP_LISTEN_ENABLE: ${SMTP_LISTEN_ENABLE:-true}
+  SMTP_LISTEN_HOST: ${SMTP_LISTEN_HOST:-0.0.0.0}
+  SMTP_LISTEN_PORT: ${SMTP_LISTEN_PORT:-2525}
+  SMTP_PUBLISHED_PORT: ${SMTP_PORT:-25}
   PYTHONPATH: /app
   # Import-time DB init races uvicorn's already-running loop (uvloop teardown).
   NEXUSOPS_SKIP_IMPORT_BOOTSTRAP: "1"
@@ -116,6 +120,7 @@ services:
       <<: *backend-environment
     ports:
       - "${BACKEND_BIND:-0.0.0.0}:${BACKEND_PORT:-8000}:8000"
+      - "${SMTP_BIND:-0.0.0.0}:${SMTP_PORT:-25}:2525"
     tmpfs:
       - /tmp:mode=01777
     cap_add:

@@ -470,3 +470,52 @@ class LdapSyncLog(Base):
     finished_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
 
     server: Mapped[LdapServer] = relationship("LdapServer", back_populates="sync_logs")
+
+
+# ---------------------------------------------------------------------------
+# SMTP relay
+# ---------------------------------------------------------------------------
+
+class SmtpRelay(Base):
+    __tablename__ = "smtp_relays"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = Column(String(120), nullable=False, index=True)
+    provider: Mapped[str] = Column(String(40), default="custom", nullable=False)  # google | microsoft | custom
+    host: Mapped[str] = Column(String(255), nullable=False)
+    port: Mapped[int] = Column(Integer, default=587, nullable=False)
+    encryption: Mapped[str] = Column(String(20), default="starttls", nullable=False)  # starttls | ssl | none
+    username: Mapped[str | None] = Column(String(255), nullable=True)
+    password: Mapped[str | None] = Column(String(500), nullable=True)
+    from_address: Mapped[str] = Column(String(255), nullable=False)
+    allowed_networks: Mapped[str] = Column(
+        String(500),
+        default="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1/32",
+        nullable=False,
+    )
+    is_default: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    enabled: Mapped[bool] = Column(Boolean, default=True, nullable=False)
+    last_test_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
+    last_test_status: Mapped[str | None] = Column(String(40), nullable=True)
+    last_test_error: Mapped[str | None] = Column(Text, nullable=True)
+    notes: Mapped[str | None] = Column(Text, nullable=True)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    messages: Mapped[list["SmtpMessage"]] = relationship("SmtpMessage", back_populates="relay")
+
+
+class SmtpMessage(Base):
+    __tablename__ = "smtp_messages"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    relay_id: Mapped[int | None] = Column(ForeignKey("smtp_relays.id"), nullable=True, index=True)
+    direction: Mapped[str] = Column(String(20), default="outbound", nullable=False)  # outbound | inbound
+    sender: Mapped[str] = Column(String(255), nullable=False)
+    recipients: Mapped[str] = Column(Text, nullable=False)
+    subject: Mapped[str | None] = Column(String(500), nullable=True)
+    status: Mapped[str] = Column(String(40), default="sent", nullable=False)  # sent | error | rejected
+    error_message: Mapped[str | None] = Column(Text, nullable=True)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    relay: Mapped[SmtpRelay | None] = relationship("SmtpRelay", back_populates="messages")
