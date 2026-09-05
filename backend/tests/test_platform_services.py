@@ -94,6 +94,18 @@ def test_docker_missing_socket_returns_503() -> None:
     assert "Docker socket" in stopped.text
 
 
+def test_dashboard_stats_include_utilization() -> None:
+    client = TestClient(app)
+    headers = _auth()
+    stats = client.get("/api/v1/dashboard/stats", headers=headers)
+    assert stats.status_code == 200, stats.text
+    body = stats.json()
+    assert "available_ips" in body["ipam"]
+    assert "zones" in body["dns"]
+    assert "expired" in body["pki"]
+    assert "total_groups" in body["inventory"]
+
+
 def test_list_uses_docker_inspect_when_present() -> None:
     row = {
         "Names": ["/nexusops-redis"],

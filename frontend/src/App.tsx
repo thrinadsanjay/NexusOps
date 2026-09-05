@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import { API_BASE_URL } from './apiBase'
-import { Sidebar, currentPageLabel } from './Sidebar'
+import { Sidebar } from './Sidebar'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
 import { GroupsPanel, HostsPanel, TagsPanel } from './Inventory'
 import { DnsOverview } from './Dns'
@@ -14,6 +14,7 @@ import { SettingsGeneral, SettingsTokens } from './Settings'
 import { AuditLogs, SystemLogs } from './Logs'
 import { Dashboard } from './Dashboard'
 import { Login } from './Login'
+import { TopBar } from './TopBar'
 import { Badge, PageHeader, cardClass, tableWrapClass } from './ui'
 
 type AuthUser = {
@@ -66,7 +67,6 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const location = useLocation()
 
   const isAuthenticated = Boolean(token && user)
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), [])
@@ -252,20 +252,14 @@ function App() {
             mobileOpen={mobileNavOpen}
             onCloseMobile={closeMobileNav}
           />
-          <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-            <header className="flex h-14 items-center justify-between border-b border-white/10 bg-[#111827] px-4 lg:px-6">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="rounded-md border border-white/10 px-3 py-1.5 text-sm text-slate-200 lg:hidden"
-                  onClick={() => setMobileNavOpen(true)}
-                >
-                  Menu
-                </button>
-                <p className="text-sm font-medium text-slate-200">{currentPageLabel(location.pathname)}</p>
-              </div>
-              <p className="truncate text-sm text-slate-500">{user?.email}</p>
-            </header>
+          <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-[#0b1220]">
+            <TopBar
+              userName={user?.full_name || user?.username || 'Operator'}
+              userRole={user?.is_superuser ? 'Local Administrator' : 'Operator'}
+              userEmail={user?.email}
+              onLogout={handleLogout}
+              onOpenMobile={() => setMobileNavOpen(true)}
+            />
             <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-8 lg:py-8">{renderRoutes()}</main>
           </div>
         </div>
