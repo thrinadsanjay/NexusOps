@@ -537,6 +537,17 @@ def create_api_token(
         expires_at=expires_at,
     )
     db.add(token)
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="TOKEN_CREATE",
+            resource="api_tokens",
+            resource_id=token.name,
+            details=f"Created API token {token.name}",
+            source="web",
+            success=True,
+        )
+    )
     db.commit()
     return {"token": raw_token, "name": token.name, "prefix": token.prefix, "expires_at": token.expires_at}
 
