@@ -75,6 +75,13 @@ def get_dashboard_stats(
 
     # ── Audit feed ────────────────────────────────────────────────────────
     recent_audit = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(8).all()
+    failed_audit = db.query(func.count(AuditLog.id)).filter(AuditLog.success.is_(False)).scalar() or 0
+
+    from app.models import DnsCloudAccount, SmtpRelay
+    from app.modules.smtp_listen import listener_running
+
+    smtp_relays = db.query(func.count(SmtpRelay.id)).filter(SmtpRelay.enabled.is_(True)).scalar() or 0
+    cf_accounts = db.query(func.count(DnsCloudAccount.id)).scalar() or 0
 
     return {
         "auth": {
@@ -111,6 +118,17 @@ def get_dashboard_stats(
             "total_certs": total_certs,
             "active_certs": active_certs,
             "expiring_30d": expiring_30,
+        },
+        "smtp": {
+            "listening": listener_running(),
+            "relays": smtp_relays,
+        },
+        "cloudflare": {
+            "accounts": cf_accounts,
+        },
+        "attention": {
+            "expiring_certs": expiring_30,
+            "failed_audit": failed_audit,
         },
         "audit": [
             {

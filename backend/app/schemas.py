@@ -861,3 +861,24 @@ class SmtpStatusRead(BaseModel):
     published_port: int | None = None
     default_relay: str | None = None
     default_smart_host: str | None = None
+
+
+class PlatformServiceRead(BaseModel):
+    id: str
+    name: str
+    role: str
+    kind: str
+    status: str
+    health: str
+    detail: str
+    controllable: bool
+    docker_available: bool
+    container: str | None = None
+    started_at: str | None = None
+
+
+class PlatformServiceActionResult(BaseModel):
+    id: str
+    action: str
+    status: str
+    message: str

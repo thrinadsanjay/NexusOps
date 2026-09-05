@@ -1,5 +1,5 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { API_BASE_URL } from './apiBase'
 import { Sidebar, currentPageLabel } from './Sidebar'
 import { IPAddressesPanel, NetworkOverview, SubnetsPanel, VLansPanel } from './Ipam'
@@ -12,8 +12,9 @@ import { SmtpPanel } from './Smtp'
 import { ToolsPanel } from './Tools'
 import { SettingsGeneral, SettingsTokens } from './Settings'
 import { AuditLogs, SystemLogs } from './Logs'
+import { Dashboard } from './Dashboard'
 import { Login } from './Login'
-import { Badge, KpiCard, PageHeader, btnSecondary, cardClass, tableWrapClass } from './ui'
+import { Badge, PageHeader, cardClass, tableWrapClass } from './ui'
 
 type AuthUser = {
   id: number
@@ -215,7 +216,7 @@ function App() {
   const renderRoutes = () => (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <Login onSubmit={handleLogin} loading={loading} error={error} />} />
-      <Route path="/" element={isAuthenticated ? <Overview user={user!} /> : <Navigate to="/login" replace />} />
+      <Route path="/" element={isAuthenticated ? <Dashboard userName={user!.full_name || user!.username || 'Operator'} /> : <Navigate to="/login" replace />} />
       <Route path="/users" element={isAuthenticated ? <UsersPanel users={users} onCreateUser={handleCreateUser} /> : <Navigate to="/login" replace />} />
       <Route path="/roles" element={isAuthenticated ? <RolesPanel roles={roles} /> : <Navigate to="/login" replace />} />
       <Route path="/ipam/vlans" element={isAuthenticated ? <VLansPanel /> : <Navigate to="/login" replace />} />
@@ -272,122 +273,6 @@ function App() {
         <main className="min-h-screen">{renderRoutes()}</main>
       )}
     </div>
-  )
-}
-
-function Overview({ user }: { user: AuthUser }) {
-  const greeting = useMemo(() => user.full_name || user.username || 'Operator', [user])
-  const token = localStorage.getItem('nexusops_token') ?? ''
-
-  type Stats = {
-    auth: { total_users: number; active_users: number; total_roles: number; total_permissions: number; active_tokens: number }
-    ipam: { total_vlans: number; total_subnets: number; assigned_ips: number; total_ips: number }
-    inventory: { total_hosts: number; active_hosts: number; unknown_hosts: number }
-    dns: { total_zones: number; forward_zones: number; total_records: number }
-    dhcp: { total_servers: number; total_pools: number; active_leases: number; total_reservations: number }
-    audit: { id: number; action: string; resource: string; success: boolean; created_at: string }[]
-  }
-
-  const [stats, setStats] = useState<Stats | null>(null)
-
-  const loadStats = useCallback(() => {
-    fetch(`${API_BASE_URL}/api/v1/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json()).then(setStats).catch(() => undefined)
-  }, [API_BASE_URL, token])
-
-  useEffect(() => {
-    loadStats()
-    const id = setInterval(loadStats, 30000)
-    return () => clearInterval(id)
-  }, [loadStats])
-
-  const moduleCards = [
-    { title: 'Network', to: '/ipam', desc: 'Subnets, VLANs, and IP registry', stat: stats ? `${stats.ipam.total_subnets} subnets · ${stats.ipam.assigned_ips} IPs` : '—' },
-    { title: 'Inventory', to: '/inventory', desc: 'Hosts, groups, and tags', stat: stats ? `${stats.inventory.active_hosts} active · ${stats.inventory.total_hosts} total` : '—' },
-    { title: 'DNS', to: '/dns', desc: 'Zones and records', stat: stats ? `${stats.dns.total_zones} zones · ${stats.dns.total_records} records` : '—' },
-    { title: 'DHCP', to: '/dhcp', desc: 'Leases and reservations', stat: stats ? `${stats.dhcp.active_leases} active leases · ${stats.dhcp.total_reservations} static` : '—' },
-    { title: 'Certificates', to: '/pki', desc: 'CAs and issued certificates', stat: stats ? `${(stats as any).pki?.active_certs ?? 0} active · ${(stats as any).pki?.expiring_30d ?? 0} expiring` : '—' },
-    { title: 'Directory', to: '/ldap', desc: 'LDAP browse, test, and sync', stat: 'Identity integration' },
-    { title: 'Users', to: '/users', desc: 'Local accounts and RBAC', stat: stats ? `${stats.auth.active_users} active · ${stats.auth.total_roles} roles` : '—' },
-    { title: 'Settings', to: '/settings', desc: 'General settings and token catalog', stat: stats ? `${stats.auth.active_tokens} active tokens` : '—' },
-  ] as const
-
-  const kpis = stats
-    ? [
-        { label: 'Hosts', value: stats.inventory.total_hosts, sub: `${stats.inventory.active_hosts} active` },
-        { label: 'Subnets', value: stats.ipam.total_subnets, sub: `${stats.ipam.assigned_ips} IPs assigned` },
-        { label: 'DNS records', value: stats.dns.total_records, sub: `${stats.dns.total_zones} zones` },
-        { label: 'DHCP leases', value: stats.dhcp.active_leases, sub: `${stats.dhcp.total_reservations} static` },
-      ]
-    : []
-
-  return (
-    <section className="space-y-6">
-      <PageHeader
-        title={`Welcome, ${greeting}`}
-        description="Operations snapshot across network, identity, and platform services."
-        actions={
-          <>
-            <span className="inline-flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Online
-            </span>
-            <button onClick={loadStats} className={btnSecondary}>
-              Refresh
-            </button>
-          </>
-        }
-      />
-
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {stats === null
-          ? [0, 1, 2, 3].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border border-white/10 bg-[#151b24]" />)
-          : kpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
-        <div className="grid gap-3 md:grid-cols-2">
-          {moduleCards.map(({ title, to, desc, stat }) => (
-            <Link
-              key={title}
-              to={to}
-              className="rounded-xl border border-white/10 bg-[#151b24] p-4 transition hover:border-indigo-500/30"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <h2 className="text-sm font-semibold text-white">{title}</h2>
-                <span className="text-xs text-slate-500">{stat}</span>
-              </div>
-              <p className="mt-1 text-sm text-slate-400">{desc}</p>
-            </Link>
-          ))}
-        </div>
-
-        <div className={cardClass}>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-white">Recent activity</h3>
-            <Link to="/logs/audit" className="text-xs text-slate-500 hover:text-indigo-300">
-              View all
-            </Link>
-          </div>
-          <div className="space-y-2">
-            {!stats || stats.audit.length === 0 ? (
-              <p className="text-sm text-slate-500">No activity yet.</p>
-            ) : (
-              stats.audit.map((log) => (
-                <div key={log.id} className="rounded-lg border border-white/5 bg-[#0b1220] px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-white">{log.action}</span>
-                    <Badge tone={log.success ? 'success' : 'danger'}>{log.success ? 'ok' : 'fail'}</Badge>
-                  </div>
-                  <div className="mt-0.5 text-xs text-slate-500">{log.resource}</div>
-                  <div className="mt-1 text-[11px] text-slate-600">{new Date(log.created_at).toLocaleString()}</div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </section>
   )
 }
 

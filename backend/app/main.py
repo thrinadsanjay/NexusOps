@@ -15,6 +15,7 @@ from app.modules.dns import router as dns_router
 from app.modules.dns_cloudflare import router as dns_cloudflare_router
 from app.modules.dhcp import router as dhcp_router
 from app.modules.dashboard import router as dashboard_router
+from app.modules.platform_services import router as platform_router
 from app.modules.pki import router as pki_router
 from app.modules.ldap_module import router as ldap_router
 from app.modules.smtp import router as smtp_router
@@ -92,6 +93,7 @@ app.include_router(dns_router)
 app.include_router(dns_cloudflare_router)
 app.include_router(dhcp_router)
 app.include_router(dashboard_router)
+app.include_router(platform_router)
 app.include_router(pki_router)
 app.include_router(ldap_router)
 app.include_router(smtp_router)
