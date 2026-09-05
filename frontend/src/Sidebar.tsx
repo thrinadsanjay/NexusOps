@@ -50,7 +50,22 @@ export const navSections: NavSection[] = [
     title: 'Platform',
     items: [
       { label: 'Integrations', to: '/tools' },
-      { label: 'Settings', to: '/settings' },
+      {
+        label: 'Settings',
+        to: '/settings',
+        children: [
+          { label: 'General', to: '/settings' },
+          { label: 'Tokens', to: '/settings/tokens' },
+        ],
+      },
+      {
+        label: 'Logs',
+        to: '/logs/audit',
+        children: [
+          { label: 'Audit', to: '/logs/audit' },
+          { label: 'Application', to: '/logs/system' },
+        ],
+      },
     ],
   },
 ]

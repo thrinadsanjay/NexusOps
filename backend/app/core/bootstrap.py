@@ -15,6 +15,7 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
         "settings:read": "View platform settings",
         "settings:write": "Update platform settings",
         "audit:read": "Read audit logs",
+        "logs:read": "Read application and system logs",
         "tokens:write": "Create and manage API tokens",
         "ipam:read": "Read IPAM data (VLANs, subnets, IPs)",
         "ipam:write": "Create and manage IPAM data",
@@ -46,6 +47,7 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
             "settings:read",
             "settings:write",
             "audit:read",
+            "logs:read",
             "tokens:write",
             "ipam:read",
             "ipam:write",
@@ -62,7 +64,7 @@ def ensure_default_roles_and_permissions(db: Session) -> None:
             "smtp:read",
             "smtp:write",
         ],
-        "operator": ["users:read", "settings:read", "audit:read", "ipam:read", "ipam:write", "inventory:read", "inventory:write", "dns:read", "dns:write", "dhcp:read", "dhcp:write", "pki:read", "pki:write", "ldap:read", "ldap:write", "smtp:read", "smtp:write"],
+        "operator": ["users:read", "settings:read", "audit:read", "logs:read", "ipam:read", "ipam:write", "inventory:read", "inventory:write", "dns:read", "dns:write", "dhcp:read", "dhcp:write", "pki:read", "pki:write", "ldap:read", "ldap:write", "smtp:read", "smtp:write"],
         "viewer": ["users:read", "settings:read", "ipam:read", "inventory:read", "dns:read", "dhcp:read", "pki:read", "ldap:read", "smtp:read"],
     }
 

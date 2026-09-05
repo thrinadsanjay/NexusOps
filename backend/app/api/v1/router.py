@@ -4,22 +4,28 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings as app_settings
 from app.core.dependencies import get_current_user, require_permission
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db import get_db
 from app.models import ApiToken, AppSetting, AuditLog, Permission, Role, User, UserSession
 from app.schemas import (
     ApiTokenCreate,
+    ApiTokenCreated,
     ApiTokenRead,
+    AppLogRead,
     AuditLogRead,
     AuthToken,
+    CredentialStatusRead,
     LoginRequest,
     PermissionRead,
     RolePermissionUpdate,
     RoleRead,
+    SettingsGeneralRead,
+    SettingsGeneralUpdate,
     SettingsUpdate,
     UserCreate,
     UserRead,
@@ -282,9 +288,45 @@ def assign_role_permissions(
 def list_audit(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("audit:read")),
-) -> list[AuditLog]:
+    limit: int = Query(default=100, ge=1, le=500),
+    q: str | None = None,
+    resource: str | None = None,
+    success: bool | None = None,
+) -> list[AuditLogRead]:
     _ = current_user
-    return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(50).all()
+    query = db.query(AuditLog).order_by(AuditLog.created_at.desc())
+    if resource:
+        query = query.filter(AuditLog.resource == resource)
+    if success is not None:
+        query = query.filter(AuditLog.success.is_(success))
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(
+            (AuditLog.action.ilike(like)) | (AuditLog.details.ilike(like)) | (AuditLog.resource.ilike(like))
+        )
+    rows = query.limit(limit).all()
+    user_ids = {row.user_id for row in rows if row.user_id}
+    names = {}
+    if user_ids:
+        names = {user.id: user.username for user in db.query(User).filter(User.id.in_(user_ids)).all()}
+    return [
+        AuditLogRead.model_validate(row).model_copy(update={"username": names.get(row.user_id)})
+        for row in rows
+    ]
+
+
+@router.get("/logs/system", response_model=list[AppLogRead])
+def list_system_logs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("logs:read")),
+    limit: int = Query(default=200, ge=1, le=500),
+    level: str | None = None,
+    q: str | None = None,
+) -> list[dict]:
+    _ = current_user
+    from app.modules.app_logs import list_logs
+
+    return list_logs(db, level=level, q=q, limit=limit)
 
 
 @router.get("/settings")
@@ -295,6 +337,157 @@ def list_settings(
     _ = current_user
     settings = db.query(AppSetting).all()
     return {item.key: item.value for item in settings}
+
+
+def _setting_value(db: Session, key: str, default: str) -> str:
+    row = db.query(AppSetting).filter(AppSetting.key == key).first()
+    return row.value if row and row.value else default
+
+
+def _upsert_setting(db: Session, key: str, value: str, description: str) -> None:
+    setting = db.query(AppSetting).filter(AppSetting.key == key).first()
+    if setting is None:
+        db.add(AppSetting(key=key, value=value, description=description))
+        return
+    setting.value = value
+    setting.description = description
+
+
+@router.get("/settings/general", response_model=SettingsGeneralRead)
+def get_general_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("settings:read")),
+) -> SettingsGeneralRead:
+    _ = current_user
+    return SettingsGeneralRead(
+        app_name=_setting_value(db, "app_name", "NexusOps"),
+        app_description=_setting_value(db, "app_description", "Infrastructure Operations Platform"),
+        theme=_setting_value(db, "theme", "dark"),
+        environment=app_settings.app_env,
+    )
+
+
+@router.put("/settings/general", response_model=SettingsGeneralRead)
+def save_general_settings(
+    payload: SettingsGeneralUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("settings:write")),
+) -> SettingsGeneralRead:
+    theme = payload.theme.strip().lower()
+    if theme not in {"dark", "light"}:
+        raise HTTPException(status_code=400, detail="theme must be dark or light")
+    _upsert_setting(db, "app_name", payload.app_name.strip(), "Application name shown in the UI")
+    _upsert_setting(db, "app_description", payload.app_description.strip(), "Short description of this instance")
+    _upsert_setting(db, "theme", theme, "Color theme")
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="SETTINGS_UPDATE",
+            resource="settings",
+            resource_id="general",
+            details="Updated general settings",
+            source="web",
+            success=True,
+        )
+    )
+    db.commit()
+    return get_general_settings(db, current_user)
+
+
+@router.get("/settings/credentials", response_model=list[CredentialStatusRead])
+def list_credentials(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("settings:read")),
+) -> list[CredentialStatusRead]:
+    _ = current_user
+    from app.models import CertificateAuthority, DnsCloudAccount, SmtpRelay
+
+    api_count = db.query(ApiToken).filter(ApiToken.user_id == current_user.id, ApiToken.is_active.is_(True)).count()
+    cf_accounts = db.query(DnsCloudAccount).all()
+    acme = [
+        ca
+        for ca in db.query(CertificateAuthority).filter(CertificateAuthority.kind == "acme").all()
+        if ca.dns_provider == "cloudflare" and ca.dns_api_token
+    ]
+    smtp = [row for row in db.query(SmtpRelay).all() if row.password]
+
+    planned = [
+        ("github", "GitHub", "github", "automation", "Deploy hooks and repository status"),
+        ("slack", "Slack", "slack", "notifications", "Alerts and change notifications"),
+        ("telegram", "Telegram", "telegram", "notifications", "Operator alerts"),
+        ("aws", "Amazon Web Services", "aws", "cloud", "Route53, IAM, and inventory"),
+        ("azure", "Microsoft Azure / Graph", "azure", "cloud", "Entra ID and DNS"),
+        ("n8n", "n8n webhooks", "n8n", "automation", "Workflow triggers"),
+    ]
+    items = [
+        CredentialStatusRead(
+            id="nexusops-api",
+            name="NexusOps API tokens",
+            provider="nexusops",
+            category="platform",
+            status="configured" if api_count else "missing",
+            summary=f"{api_count} active token{'s' if api_count != 1 else ''}" if api_count else "None issued yet",
+            href="/settings/tokens",
+            configured=bool(api_count),
+        ),
+        CredentialStatusRead(
+            id="cloudflare-dns",
+            name="Cloudflare DNS",
+            provider="cloudflare",
+            category="dns",
+            status="configured" if cf_accounts else "missing",
+            summary=(
+                ", ".join(account.name for account in cf_accounts)
+                if cf_accounts
+                else "Used to sync zones such as sanjay-lab.online"
+            ),
+            href="/dns",
+            configured=bool(cf_accounts),
+        ),
+        CredentialStatusRead(
+            id="cloudflare-acme",
+            name="Let's Encrypt (Cloudflare DNS-01)",
+            provider="cloudflare",
+            category="certificates",
+            status="configured" if acme else "missing",
+            summary=(
+                f"{len(acme)} Let's Encrypt CA{'s' if len(acme) != 1 else ''} with a DNS token"
+                if acme
+                else "Separate CA token, or reuse the DNS account later"
+            ),
+            href="/pki",
+            configured=bool(acme),
+        ),
+        CredentialStatusRead(
+            id="smtp-relay",
+            name="SMTP relay password",
+            provider="smtp",
+            category="mail",
+            status="configured" if smtp else "missing",
+            summary=(
+                ", ".join(row.name for row in smtp)
+                if smtp
+                else "Gmail App Password or smart-host secret"
+            ),
+            href="/smtp",
+            configured=bool(smtp),
+        ),
+    ]
+    for key, name, provider, category, summary in planned:
+        items.append(
+            CredentialStatusRead(
+                id=key,
+                name=name,
+                provider=provider,
+                category=category,
+                status="planned",
+                summary=summary,
+                href="/settings/tokens",
+                configured=False,
+                planned=True,
+            )
+        )
+    return items
 
 
 @router.put("/settings")
@@ -327,7 +520,7 @@ def save_setting(
     return {"status": "ok", "key": payload.key, "value": payload.value}
 
 
-@router.post("/api-tokens", response_model=ApiTokenRead)
+@router.post("/api-tokens", response_model=ApiTokenCreated)
 def create_api_token(
     payload: ApiTokenCreate,
     db: Session = Depends(get_db),
@@ -354,7 +547,31 @@ def list_api_tokens(
     current_user: User = Depends(require_permission("tokens:write")),
 ) -> list[ApiToken]:
     _ = current_user
-    return db.query(ApiToken).filter(ApiToken.user_id == current_user.id).all()
+    return db.query(ApiToken).filter(ApiToken.user_id == current_user.id).order_by(ApiToken.created_at.desc()).all()
+
+
+@router.delete("/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+def revoke_api_token(
+    token_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("tokens:write")),
+) -> None:
+    token = db.query(ApiToken).filter(ApiToken.id == token_id, ApiToken.user_id == current_user.id).first()
+    if not token:
+        raise HTTPException(status_code=404, detail="API token not found")
+    token.is_active = False
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="TOKEN_REVOKE",
+            resource="api_tokens",
+            resource_id=str(token.id),
+            details=f"Revoked token {token.name}",
+            source="web",
+            success=True,
+        )
+    )
+    db.commit()
 
 
 @router.post("/auth/change-password")

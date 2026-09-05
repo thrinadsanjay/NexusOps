@@ -14,6 +14,8 @@ describe('enterprise navigation', () => {
     expect(labels).toContain('Directory')
     expect(labels).toContain('Integrations')
     expect(labels).toContain('Mail')
+    expect(labels).toContain('Settings')
+    expect(labels).toContain('Logs')
   })
 
   it('labels nested infrastructure pages for the top bar', () => {
@@ -21,6 +23,10 @@ describe('enterprise navigation', () => {
     expect(currentPageLabel('/ipam/vlans')).toBe('VLANs')
     expect(currentPageLabel('/inventory/groups')).toBe('Groups')
     expect(currentPageLabel('/tools')).toBe('Integrations')
+    expect(currentPageLabel('/settings')).toBe('General')
+    expect(currentPageLabel('/settings/tokens')).toBe('Tokens')
+    expect(currentPageLabel('/logs/audit')).toBe('Audit')
+    expect(currentPageLabel('/logs/system')).toBe('Application')
   })
 })
 

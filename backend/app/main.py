@@ -21,8 +21,10 @@ from app.modules.smtp import router as smtp_router
 from app.core.bootstrap import ensure_admin_user, ensure_bundled_ldap_server
 from app.core.config import settings
 from app.db import create_database, get_db, redact_database_url, DATABASE_URL
+from app.modules.app_logs import install_log_handler
 
 logger = logging.getLogger("nexusops")
+install_log_handler()
 
 
 def bootstrap_app() -> None:
