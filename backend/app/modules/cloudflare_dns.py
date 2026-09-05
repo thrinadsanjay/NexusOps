@@ -187,3 +187,16 @@ def upsert_record(token: str, zone_id: str, zone_name: str, record: dict) -> str
         if response.status_code not in {200, 201} or not body.get("success"):
             raise CloudflareError(_problem(body, response))
         return str(body["result"]["id"])
+
+
+def delete_remote_record(token: str, zone_id: str, record_id: str) -> None:
+    with httpx.Client(timeout=20) as client:
+        response = client.delete(
+            f"{CF_API}/zones/{zone_id}/dns_records/{record_id}",
+            headers=_headers(token),
+        )
+        if response.status_code == 404:
+            return
+        body = response.json() if response.content else {}
+        if response.status_code not in {200, 204} or (isinstance(body, dict) and body.get("success") is False):
+            raise CloudflareError(_problem(body if isinstance(body, dict) else {}, response))

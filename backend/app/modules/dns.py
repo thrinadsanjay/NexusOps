@@ -92,6 +92,9 @@ def create_record(zone_id: int, payload: DnsRecordCreate, db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown record type '{rtype}'")
     record = DnsRecord(zone_id=zone_id, **{**payload.model_dump(), "record_type": rtype})
     db.add(record); db.commit(); db.refresh(record)
+    from app.modules.dns_cloudflare import push_record_live
+    push_record_live(db, record)
+    db.refresh(record)
     return record
 
 
@@ -106,6 +109,9 @@ def update_record(zone_id: int, record_id: int, payload: DnsRecordUpdate, db: Se
     for field, value in data.items():
         setattr(record, field, value)
     db.commit(); db.refresh(record)
+    from app.modules.dns_cloudflare import push_record_live
+    push_record_live(db, record)
+    db.refresh(record)
     return record
 
 
@@ -114,6 +120,8 @@ def delete_record(zone_id: int, record_id: int, db: Session = Depends(get_db), _
     record = db.query(DnsRecord).filter(DnsRecord.id == record_id, DnsRecord.zone_id == zone_id).first()
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    from app.modules.dns_cloudflare import delete_record_live
+    delete_record_live(db, record)
     db.delete(record); db.commit()
 
 

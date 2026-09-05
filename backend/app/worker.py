@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -18,12 +19,25 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "cloudflare-dns-daily": {
+            "task": "nexusops.sync_cloudflare_dns",
+            "schedule": crontab(hour=3, minute=0),
+        }
+    },
 )
 
 
 @celery_app.task
 def ping() -> str:
     return "pong"
+
+
+@celery_app.task(name="nexusops.sync_cloudflare_dns")
+def sync_cloudflare_dns_task() -> dict:
+    from app.modules.dns_cloudflare import sync_all_linked_zones
+
+    return sync_all_linked_zones()
 
 
 @celery_app.task(bind=True, name="nexusops.scan_subnet")

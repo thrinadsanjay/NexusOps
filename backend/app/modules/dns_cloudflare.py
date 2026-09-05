@@ -8,11 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_permission
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.models import DnsCloudAccount, DnsRecord, DnsZone
 from app.modules.cloudflare_dns import (
     CloudflareError,
     decrypt_token,
+    delete_remote_record,
     encrypt_token,
     find_zone,
     list_records,
@@ -255,49 +256,7 @@ def push_zone(
     if not zone or not zone.cloud_account_id or not zone.cloudflare_zone_id:
         raise HTTPException(status_code=400, detail="Link this zone to Cloudflare first")
     account = _get_account(zone.cloud_account_id, db)
-    token = _token(account)
-    created = updated = unchanged = 0
-    errors: list[str] = []
-    for row in zone.records:
-        if row.record_type.upper() in {"NS", "SOA"}:
-            continue
-        try:
-            record_id = upsert_record(
-                token,
-                zone.cloudflare_zone_id,
-                zone.name,
-                {
-                    "id": row.cloudflare_record_id,
-                    "type": row.record_type.upper(),
-                    "name": row.name,
-                    "content": row.value,
-                    "ttl": row.ttl or 1,
-                    "priority": row.priority,
-                },
-            )
-            if row.cloudflare_record_id:
-                if row.cloudflare_record_id == record_id:
-                    unchanged += 1
-                else:
-                    updated += 1
-            else:
-                created += 1
-            row.cloudflare_record_id = record_id
-        except CloudflareError as exc:
-            errors.append(f"{row.name} {row.record_type}: {exc}")
-    zone.last_sync_at = datetime.utcnow()
-    zone.last_sync_direction = "push"
-    zone.last_sync_status = "error" if errors else "ok"
-    zone.last_sync_error = "; ".join(errors) if errors else None
-    db.commit()
-    return DnsSyncResult(
-        direction="push",
-        created=created,
-        updated=updated,
-        unchanged=unchanged,
-        errors=errors,
-        message="Pushed local records to Cloudflare. Cloudflare-only records were left in place.",
-    )
+    return _push_zone(db, zone, _token(account), direction="push")
 
 
 def _pull_zone(db: Session, zone: DnsZone, token: str) -> DnsSyncResult:
@@ -374,4 +333,123 @@ def _pull_zone(db: Session, zone: DnsZone, token: str) -> DnsSyncResult:
         updated=updated,
         unchanged=unchanged,
         message="Pulled Cloudflare records into NexusOps. Local-only records were left in place.",
+    )
+
+
+def _linked(zone: DnsZone | None) -> bool:
+    return bool(zone and zone.cloud_account_id and zone.cloudflare_zone_id)
+
+
+def push_record_live(db: Session, record: DnsRecord) -> None:
+    zone = record.zone or db.query(DnsZone).filter(DnsZone.id == record.zone_id).first()
+    if not _linked(zone) or record.record_type.upper() in {"NS", "SOA"}:
+        return
+    assert zone is not None
+    account = _get_account(zone.cloud_account_id, db)  # type: ignore[arg-type]
+    token = _token(account)
+    try:
+        record.cloudflare_record_id = upsert_record(
+            token,
+            zone.cloudflare_zone_id or "",
+            zone.name,
+            {
+                "id": record.cloudflare_record_id,
+                "type": record.record_type.upper(),
+                "name": record.name,
+                "content": record.value,
+                "ttl": record.ttl or 1,
+                "priority": record.priority,
+            },
+        )
+        zone.last_sync_at = datetime.utcnow()
+        zone.last_sync_direction = "live"
+        zone.last_sync_status = "ok"
+        zone.last_sync_error = None
+        db.commit()
+    except CloudflareError as exc:
+        zone.last_sync_at = datetime.utcnow()
+        zone.last_sync_direction = "live"
+        zone.last_sync_status = "error"
+        zone.last_sync_error = str(exc)
+        db.commit()
+        raise HTTPException(status_code=400, detail=f"Saved locally, but Cloudflare sync failed: {exc}") from exc
+
+
+def delete_record_live(db: Session, record: DnsRecord) -> None:
+    zone = record.zone or db.query(DnsZone).filter(DnsZone.id == record.zone_id).first()
+    if not _linked(zone) or not record.cloudflare_record_id:
+        return
+    assert zone is not None
+    account = _get_account(zone.cloud_account_id, db)  # type: ignore[arg-type]
+    try:
+        delete_remote_record(_token(account), zone.cloudflare_zone_id or "", record.cloudflare_record_id)
+    except CloudflareError as exc:
+        raise HTTPException(status_code=400, detail=f"Cloudflare would not delete the record: {exc}") from exc
+
+
+def sync_all_linked_zones() -> dict:
+    """Daily job: pull Cloudflare, then push local records, for every linked zone."""
+    db = SessionLocal()
+    results: list[dict] = []
+    try:
+        zones = (
+            db.query(DnsZone)
+            .filter(DnsZone.cloud_account_id.isnot(None), DnsZone.cloudflare_zone_id.isnot(None))
+            .all()
+        )
+        for zone in zones:
+            try:
+                account = _get_account(zone.cloud_account_id, db)  # type: ignore[arg-type]
+                token = _token(account)
+                pulled = _pull_zone(db, zone, token)
+                db.refresh(zone)
+                pushed = _push_zone(db, zone, token, direction="daily")
+                results.append({"zone": zone.name, "pull": pulled.created, "push": pushed.created, "status": "ok"})
+            except Exception as exc:
+                results.append({"zone": zone.name, "status": "error", "error": str(exc)})
+        return {"zones": len(results), "results": results}
+    finally:
+        db.close()
+
+
+def _push_zone(db: Session, zone: DnsZone, token: str, direction: str = "push") -> DnsSyncResult:
+    created = updated = unchanged = 0
+    errors: list[str] = []
+    for row in zone.records:
+        if row.record_type.upper() in {"NS", "SOA"}:
+            continue
+        try:
+            record_id = upsert_record(
+                token,
+                zone.cloudflare_zone_id or "",
+                zone.name,
+                {
+                    "id": row.cloudflare_record_id,
+                    "type": row.record_type.upper(),
+                    "name": row.name,
+                    "content": row.value,
+                    "ttl": row.ttl or 1,
+                    "priority": row.priority,
+                },
+            )
+            if row.cloudflare_record_id:
+                unchanged += 1 if row.cloudflare_record_id == record_id else 0
+                updated += 1 if row.cloudflare_record_id != record_id else 0
+            else:
+                created += 1
+            row.cloudflare_record_id = record_id
+        except CloudflareError as exc:
+            errors.append(f"{row.name} {row.record_type}: {exc}")
+    zone.last_sync_at = datetime.utcnow()
+    zone.last_sync_direction = direction
+    zone.last_sync_status = "error" if errors else "ok"
+    zone.last_sync_error = "; ".join(errors) if errors else None
+    db.commit()
+    return DnsSyncResult(
+        direction="push",
+        created=created,
+        updated=updated,
+        unchanged=unchanged,
+        errors=errors,
+        message="Pushed local records to Cloudflare. Cloudflare-only records were left in place.",
     )

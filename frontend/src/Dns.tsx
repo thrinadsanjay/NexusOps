@@ -249,7 +249,7 @@ export function DnsOverview() {
 
   return (
     <section className="space-y-6">
-      <PageHeader title="DNS" description="Local zones and optional Cloudflare sync. The API token stays on the server and is never returned to the browser." />
+      <PageHeader title="DNS" description="Local add/delete is pushed to Cloudflare immediately when a zone is linked. A full pull-then-push runs daily at 03:00 UTC. The API token stays on the server." />
 
       <form onSubmit={saveCloudflare} className={`${card} grid gap-3 md:grid-cols-[1fr_1fr_auto]`}>
         <div className="md:col-span-2 xl:col-span-3 text-sm text-slate-300">

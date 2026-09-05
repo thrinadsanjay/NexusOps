@@ -62,6 +62,51 @@ def test_cloudflare_account_never_returns_token_and_can_pull() -> None:
     assert names["@"]["record_type"] == "TXT"
 
 
+def test_local_add_and_delete_sync_to_cloudflare() -> None:
+    client = TestClient(app)
+    headers = _auth()
+    with patch("app.modules.dns_cloudflare.verify_token", return_value={"status": "ok", "message": "ok"}):
+        account = client.post(
+            "/api/v1/dns/cloudflare/accounts",
+            headers=headers,
+            json={"name": "CF live", "api_token": "cf-secret-token-value"},
+        ).json()
+    remote_zones = [CfZone(id="zone-live", name="sync.example.com", status="active")]
+    with (
+        patch("app.modules.dns_cloudflare.list_zones", return_value=remote_zones),
+        patch("app.modules.dns_cloudflare.list_records", return_value=[]),
+        patch("app.modules.dns_cloudflare.decrypt_token", return_value="cf-secret-token-value"),
+    ):
+        imported = client.post(
+            f"/api/v1/dns/cloudflare/accounts/{account['id']}/import",
+            headers=headers,
+            json={"cloudflare_zone_id": "zone-live"},
+        )
+    assert imported.status_code == 200, imported.text
+    zone_id = imported.json()["id"]
+
+    with (
+        patch("app.modules.dns_cloudflare.upsert_record", return_value="cf-rec-9") as upserted,
+        patch("app.modules.dns_cloudflare.decrypt_token", return_value="cf-secret-token-value"),
+    ):
+        created = client.post(
+            f"/api/v1/dns/zones/{zone_id}/records",
+            headers=headers,
+            json={"name": "app", "record_type": "A", "value": "10.1.1.8"},
+        )
+    assert created.status_code == 201, created.text
+    assert created.json()["cloudflare_record_id"] == "cf-rec-9"
+    upserted.assert_called_once()
+
+    with (
+        patch("app.modules.dns_cloudflare.delete_remote_record") as deleted,
+        patch("app.modules.dns_cloudflare.decrypt_token", return_value="cf-secret-token-value"),
+    ):
+        gone = client.delete(f"/api/v1/dns/zones/{zone_id}/records/{created.json()['id']}", headers=headers)
+    assert gone.status_code == 204
+    deleted.assert_called_once()
+
+
 def test_encrypt_token_is_not_plaintext() -> None:
     blob = encrypt_token("cf-secret-token-value")
     assert blob != "cf-secret-token-value"
