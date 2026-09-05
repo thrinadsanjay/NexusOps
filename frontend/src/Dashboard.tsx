@@ -180,7 +180,7 @@ export function Dashboard({ userName }: { userName: string }) {
       items.push({ tone: 'info', text: 'Cloudflare DNS token is not configured', to: '/dns' })
     }
     services
-      .filter((item) => item.status === 'stopped' || item.health === 'unhealthy')
+      .filter((item) => item.id !== 'smtp' && (item.status === 'stopped' || item.health === 'unhealthy'))
       .forEach((item) => {
         items.push({ tone: 'danger', text: `${item.name} is ${item.status === 'stopped' ? 'stopped' : 'unhealthy'}`, to: '/' })
       })
@@ -281,6 +281,8 @@ export function Dashboard({ userName }: { userName: string }) {
                         <div className="flex flex-wrap justify-end gap-1.5">
                           <button
                             type="button"
+                            data-service-id={service.id}
+                            data-action="start"
                             title={service.controllable ? 'Start this service' : 'Control is unavailable without the Docker socket'}
                             disabled={!service.controllable || working || service.status === 'running'}
                             onClick={() => void control(service.id, 'start')}
@@ -290,6 +292,8 @@ export function Dashboard({ userName }: { userName: string }) {
                           </button>
                           <button
                             type="button"
+                            data-service-id={service.id}
+                            data-action="stop"
                             title={service.controllable ? 'Stop this service' : 'Control is unavailable without the Docker socket'}
                             disabled={!service.controllable || working || service.status === 'stopped'}
                             onClick={() => void control(service.id, 'stop')}
@@ -299,6 +303,8 @@ export function Dashboard({ userName }: { userName: string }) {
                           </button>
                           <button
                             type="button"
+                            data-service-id={service.id}
+                            data-action="restart"
                             title={service.controllable ? 'Restart this service' : 'Control is unavailable without the Docker socket'}
                             disabled={!service.controllable || Boolean(busy)}
                             onClick={() => void control(service.id, 'restart')}

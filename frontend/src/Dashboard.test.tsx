@@ -113,9 +113,12 @@ describe('Dashboard', () => {
     expect(container.textContent).toContain('Recent activity')
     expect(container.textContent).toContain('LOGIN')
 
-    const startButtons = Array.from(container.querySelectorAll('button')).filter((button) => button.textContent === 'Start')
-    const smtpStart = startButtons.find((button) => !button.disabled)
-    expect(smtpStart).toBeTruthy()
+    const smtpStart = container.querySelector('button[data-service-id="smtp"][data-action="start"]') as HTMLButtonElement | null
+    const smtpStop = container.querySelector('button[data-service-id="smtp"][data-action="stop"]') as HTMLButtonElement | null
+    const postgresStart = container.querySelector('button[data-service-id="postgres"][data-action="start"]') as HTMLButtonElement | null
+    expect(smtpStart?.disabled).toBe(false)
+    expect(smtpStop?.disabled).toBe(true)
+    expect(postgresStart?.disabled).toBe(true)
 
     await act(async () => {
       smtpStart!.click()
