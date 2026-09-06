@@ -306,6 +306,8 @@ def enable_local_dhcp(
         apply_pools(db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"Cannot write DHCP config ({exc}). Mount dhcp_data on backend and the dhcp sidecar.") from exc
     set_enabled(True)
     persist_setting(db, True)
     server = ensure_local_server(db)
