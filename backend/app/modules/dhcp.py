@@ -304,11 +304,11 @@ def enable_local_dhcp(
 ) -> DhcpLocalStatus:
     try:
         apply_pools(db)
+        set_enabled(True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=503, detail=f"Cannot write DHCP config ({exc}). Mount dhcp_data on backend and the dhcp sidecar.") from exc
-    set_enabled(True)
     persist_setting(db, True)
     server = ensure_local_server(db)
     server.status = "active"
@@ -324,7 +324,10 @@ def disable_local_dhcp(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("dhcp:write")),
 ) -> DhcpLocalStatus:
-    set_enabled(False)
+    try:
+        set_enabled(False)
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"Cannot update DHCP config ({exc}). Mount dhcp_data on backend and the dhcp sidecar.") from exc
     persist_setting(db, False)
     server = db.query(DhcpServer).filter(DhcpServer.kind == "local").first()
     if server:

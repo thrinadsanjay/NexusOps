@@ -87,6 +87,28 @@ def test_local_enable_disable(tmp_path: Path, monkeypatch) -> None:
     assert not (tmp_path / "enabled").exists()
 
 
+def test_local_enable_seeds_default_pool(tmp_path: Path, monkeypatch) -> None:
+    from app.core import config
+    from app.modules import dhcp_local
+
+    monkeypatch.setattr(config.settings, "dhcp_data_dir", str(tmp_path))
+    monkeypatch.setattr(dhcp_local.settings, "dhcp_data_dir", str(tmp_path))
+    client = TestClient(app)
+    headers = _auth()
+    enabled = client.post("/api/v1/dhcp/local/enable", headers=headers)
+    assert enabled.status_code == 200, enabled.text
+    body = enabled.json()
+    assert body["enabled"] is True
+    assert body["pools"] >= 1
+    assert (tmp_path / "enabled").exists()
+    conf = (tmp_path / "dnsmasq.conf").read_text()
+    assert "dhcp-range" in conf
+    disabled = client.post("/api/v1/dhcp/local/disable", headers=headers)
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["enabled"] is False
+    assert not (tmp_path / "enabled").exists()
+
+
 def test_router_fetch_from_paste() -> None:
     client = TestClient(app)
     headers = _auth()

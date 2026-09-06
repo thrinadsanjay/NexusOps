@@ -12,11 +12,13 @@ function authHeaders() {
 export type DhcpLease = {
   id: number; pool_id: number | null; ip_address: string; mac_address: string
   hostname: string | null; status: string; lease_start: string | null
-  lease_end: string | null; last_seen_at: string | null
+  lease_end: string | null; last_seen_at: string | null; source?: string | null
 }
 export type DhcpReservation = { id: number; pool_id: number; ip_address: string; mac_address: string; hostname: string | null; description: string | null }
 export type DhcpPool = { id: number; server_id: number; subnet: string; range_start: string; range_end: string; gateway: string | null; dns_servers: string | null; lease_time: number; description: string | null; leases: DhcpLease[]; reservations: DhcpReservation[] }
 export type DhcpServer = { id: number; name: string; host: string; description: string | null; status: string; kind?: string; pools: DhcpPool[] }
+
+const KIND_LABEL: Record<string, string> = { local: 'Local', router: 'Router', registry: 'Registry' }
 
 type LocalStatus = {
   enabled: boolean
@@ -114,7 +116,7 @@ export function DhcpPanel() {
     fetch(`${API_BASE_URL}/api/v1/dhcp/local/status`, { headers: authHeaders() })
       .then((r) => r.json())
       .then((data) => {
-        if (!data.detail) return
+        if (typeof data.enabled !== 'boolean') return
         setLocal(data)
       })
       .catch(() => undefined)
@@ -128,15 +130,20 @@ export function DhcpPanel() {
     }
     setLocalBusy(true)
     setLocalErr('')
-    const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/local/${on ? 'enable' : 'disable'}`, { method: 'POST', headers: authHeaders() })
-    const data = await r.json().catch(() => ({}))
-    setLocalBusy(false)
-    if (!r.ok) {
-      setLocalErr(typeof data.detail === 'string' ? data.detail : `Could not ${on ? 'enable' : 'disable'} local DHCP`)
-      return
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/local/${on ? 'enable' : 'disable'}`, { method: 'POST', headers: authHeaders() })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setLocalErr(typeof data.detail === 'string' ? data.detail : `Could not ${on ? 'enable' : 'disable'} local DHCP`)
+        return
+      }
+      setLocal(data)
+      loadServers()
+    } catch {
+      setLocalErr(`Could not ${on ? 'enable' : 'disable'} local DHCP`)
+    } finally {
+      setLocalBusy(false)
     }
-    setLocal(data)
-    loadServers()
   }
 
   const fetchRouter = async (event: FormEvent) => {
@@ -367,7 +374,10 @@ export function DhcpPanel() {
               <div key={svr.id} className="rounded-xl border border-white/10 bg-[#151b24]">
                 <button onClick={() => handleSelectServer(svr)} className={`group flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left transition ${selected?.id === svr.id ? 'bg-indigo-500/10' : 'hover:bg-slate-800/50'}`}>
                   <div>
-                    <div className="font-semibold text-white">{svr.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-semibold text-white">{svr.name}</div>
+                      {svr.kind ? <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">{KIND_LABEL[svr.kind] ?? svr.kind}</span> : null}
+                    </div>
                     <div className="font-mono text-[11px] text-slate-400">{svr.host}</div>
                   </div>
                   <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteServer(svr.id) }} className="hidden text-xs text-rose-400 hover:text-rose-300 group-hover:block">✕</button>
@@ -470,15 +480,16 @@ export function DhcpPanel() {
                 <h3 className="mb-4 text-base font-semibold text-white">Active leases</h3>
                 <div className="overflow-x-auto rounded-lg border border-white/10">
                   <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                    <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Expires</th><th className="px-3 py-3" /></tr></thead>
+                    <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Source</th><th className="px-3 py-3 font-medium">Expires</th><th className="px-3 py-3" /></tr></thead>
                     <tbody className="divide-y divide-slate-800 bg-slate-900/60">
-                      {selectedPool.leases.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">No leases.</td></tr>
+                      {selectedPool.leases.length === 0 ? <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">No leases.</td></tr>
                         : selectedPool.leases.map((l) => (
                           <tr key={l.id} className="hover:bg-slate-800/50">
                             <td className="px-3 py-3 font-mono text-white">{l.ip_address}</td>
                             <td className="px-3 py-3 font-mono text-slate-300">{l.mac_address}</td>
                             <td className="px-3 py-3 text-slate-200">{l.hostname ?? '—'}</td>
                             <td className="px-3 py-3"><LeaseBadge s={l.status} /></td>
+                            <td className="px-3 py-3 text-[11px] capitalize text-slate-400">{l.source ?? '—'}</td>
                             <td className="px-3 py-3 text-[11px] text-slate-400">{l.lease_end ? new Date(l.lease_end).toLocaleString() : '—'}</td>
                             <td className="px-3 py-3 text-right space-x-2">
                               <button onClick={() => handlePromote(l.id)} disabled={promoting === l.id} className="rounded-xl border border-amber-500/30 bg-indigo-500/10 px-2 py-1 text-[10px] text-amber-300 hover:bg-amber-500/20 disabled:opacity-60">
@@ -526,15 +537,16 @@ export function DhcpPanel() {
               </div>
               <div className="overflow-x-auto rounded-lg border border-white/10">
                 <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
-                  <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Last seen</th></tr></thead>
+                  <thead className="bg-[#0b1220] text-xs font-medium uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-3 font-medium">IP</th><th className="px-3 py-3 font-medium">MAC</th><th className="px-3 py-3 font-medium">Hostname</th><th className="px-3 py-3 font-medium">Status</th><th className="px-3 py-3 font-medium">Source</th><th className="px-3 py-3 font-medium">Last seen</th></tr></thead>
                   <tbody className="divide-y divide-slate-800 bg-slate-900/60">
-                    {filteredAllLeases.length === 0 ? <tr><td colSpan={5} className="px-3 py-8 text-center text-slate-400">{allLeases.length === 0 ? 'No leases recorded yet.' : 'No matches.'}</td></tr>
+                    {filteredAllLeases.length === 0 ? <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">{allLeases.length === 0 ? 'No leases recorded yet.' : 'No matches.'}</td></tr>
                       : filteredAllLeases.map((l) => (
                         <tr key={l.id} className="hover:bg-slate-800/50">
                           <td className="px-3 py-3 font-mono text-white">{l.ip_address}</td>
                           <td className="px-3 py-3 font-mono text-slate-300">{l.mac_address}</td>
                           <td className="px-3 py-3 text-slate-200">{l.hostname ?? '—'}</td>
                           <td className="px-3 py-3"><LeaseBadge s={l.status} /></td>
+                          <td className="px-3 py-3 text-[11px] capitalize text-slate-400">{l.source ?? '—'}</td>
                           <td className="px-3 py-3 text-[11px] text-slate-400">{l.last_seen_at ? new Date(l.last_seen_at).toLocaleString() : '—'}</td>
                         </tr>
                       ))}

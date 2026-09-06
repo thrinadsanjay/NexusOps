@@ -126,11 +126,12 @@ def is_enabled() -> bool:
 
 
 def set_enabled(on: bool) -> None:
-    ensure_data_dir()
     flag = enabled_flag()
     if on:
+        ensure_data_dir()
         flag.write_text("1\n", encoding="utf-8")
-    elif flag.exists():
+        return
+    if flag.exists():
         flag.unlink()
 
 
@@ -170,6 +171,12 @@ def persist_setting(db, enabled: bool) -> None:
     db.commit()
 
 
+DEFAULT_SUBNET = "192.168.1.0/24"
+DEFAULT_START = "192.168.1.100"
+DEFAULT_END = "192.168.1.200"
+DEFAULT_GATEWAY = "192.168.1.1"
+
+
 def seed_pool_from_ipam(db, server: DhcpServer) -> DhcpPool | None:
     from app.models import Subnet
 
@@ -202,9 +209,56 @@ def seed_pool_from_ipam(db, server: DhcpServer) -> DhcpPool | None:
     return pool
 
 
+def _pool_from_router(db, server: DhcpServer) -> DhcpPool | None:
+    router = db.query(DhcpServer).filter(DhcpServer.kind == "router").order_by(DhcpServer.id).first()
+    if not router:
+        return None
+    src = db.query(DhcpPool).filter(DhcpPool.server_id == router.id).first()
+    if not src:
+        return None
+    pool = DhcpPool(
+        server_id=server.id,
+        subnet=src.subnet,
+        range_start=src.range_start,
+        range_end=src.range_end,
+        gateway=src.gateway,
+        dns_servers=src.dns_servers,
+        lease_time=src.lease_time or 86400,
+        description="Copied from the imported router table",
+    )
+    db.add(pool)
+    db.commit()
+    db.refresh(pool)
+    return pool
+
+
+def ensure_local_pool(db, server: DhcpServer) -> DhcpPool:
+    existing = db.query(DhcpPool).filter(DhcpPool.server_id == server.id).first()
+    if existing:
+        return existing
+    seeded = seed_pool_from_ipam(db, server)
+    if seeded:
+        return seeded
+    copied = _pool_from_router(db, server)
+    if copied:
+        return copied
+    pool = DhcpPool(
+        server_id=server.id,
+        subnet=DEFAULT_SUBNET,
+        range_start=DEFAULT_START,
+        range_end=DEFAULT_END,
+        gateway=DEFAULT_GATEWAY,
+        description="Default LAN pool — edit the range if your network uses a different subnet",
+    )
+    db.add(pool)
+    db.commit()
+    db.refresh(pool)
+    return pool
+
+
 def apply_pools(db) -> str:
     server = ensure_local_server(db)
-    seed_pool_from_ipam(db, server)
+    ensure_local_pool(db, server)
     pools = db.query(DhcpPool).filter(DhcpPool.server_id == server.id).all()
     reservations: list[DhcpReservation] = []
     for pool in pools:
