@@ -16,7 +16,18 @@ export type DhcpLease = {
 }
 export type DhcpReservation = { id: number; pool_id: number; ip_address: string; mac_address: string; hostname: string | null; description: string | null }
 export type DhcpPool = { id: number; server_id: number; subnet: string; range_start: string; range_end: string; gateway: string | null; dns_servers: string | null; lease_time: number; description: string | null; leases: DhcpLease[]; reservations: DhcpReservation[] }
-export type DhcpServer = { id: number; name: string; host: string; description: string | null; status: string; pools: DhcpPool[] }
+export type DhcpServer = { id: number; name: string; host: string; description: string | null; status: string; kind?: string; pools: DhcpPool[] }
+
+type LocalStatus = {
+  enabled: boolean
+  running: boolean
+  server_id: number | null
+  pools: number
+  reservations: number
+  leases: number
+  detail: string
+  warning: string
+}
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +53,19 @@ export function DhcpPanel() {
   const [allLeases, setAllLeases] = useState<DhcpLease[]>([])
   const [leaseFilter, setLeaseFilter] = useState('')
   const [promoting, setPromoting] = useState<number | null>(null)
+  const [local, setLocal] = useState<LocalStatus | null>(null)
+  const [localBusy, setLocalBusy] = useState(false)
+  const [localErr, setLocalErr] = useState('')
+  const [routerType, setRouterType] = useState('auto')
+  const [routerHost, setRouterHost] = useState('192.168.1.1')
+  const [routerUser, setRouterUser] = useState('admin')
+  const [routerPass, setRouterPass] = useState('')
+  const [routerHttps, setRouterHttps] = useState(false)
+  const [routerPort, setRouterPort] = useState('')
+  const [routerPaste, setRouterPaste] = useState('')
+  const [routerBusy, setRouterBusy] = useState(false)
+  const [routerErr, setRouterErr] = useState('')
+  const [routerNotice, setRouterNotice] = useState('')
 
   // server form
   const [showServerForm, setShowServerForm] = useState(false)
@@ -86,7 +110,65 @@ export function DhcpPanel() {
       .then((r) => r.json()).then(setAllLeases).catch(() => undefined)
   }, [])
 
-  useEffect(() => { loadServers(); loadAllLeases() }, [loadServers, loadAllLeases])
+  const loadLocal = useCallback(() => {
+    fetch(`${API_BASE_URL}/api/v1/dhcp/local/status`, { headers: authHeaders() })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.detail) return
+        setLocal(data)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => { loadServers(); loadAllLeases(); loadLocal() }, [loadServers, loadAllLeases, loadLocal])
+
+  const toggleLocal = async (on: boolean) => {
+    if (on && !window.confirm('Enable NexusOps as the LAN DHCP server? Turn DHCP off on the router first, or clients will get conflicting addresses.')) {
+      return
+    }
+    setLocalBusy(true)
+    setLocalErr('')
+    const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/local/${on ? 'enable' : 'disable'}`, { method: 'POST', headers: authHeaders() })
+    const data = await r.json().catch(() => ({}))
+    setLocalBusy(false)
+    if (!r.ok) {
+      setLocalErr(typeof data.detail === 'string' ? data.detail : `Could not ${on ? 'enable' : 'disable'} local DHCP`)
+      return
+    }
+    setLocal(data)
+    loadServers()
+  }
+
+  const fetchRouter = async (event: FormEvent) => {
+    event.preventDefault()
+    setRouterBusy(true)
+    setRouterErr('')
+    setRouterNotice('')
+    const r = await fetch(`${API_BASE_URL}/api/v1/dhcp/router/fetch`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        host: routerHost,
+        router_type: routerType,
+        username: routerUser,
+        password: routerPass || null,
+        https: routerHttps,
+        port: routerPort ? Number(routerPort) : null,
+        lease_text: routerPaste || null,
+        name: 'Home router',
+      }),
+    })
+    const data = await r.json().catch(() => ({}))
+    setRouterBusy(false)
+    if (!r.ok) {
+      setRouterErr(typeof data.detail === 'string' ? data.detail : 'Could not fetch the router DHCP table')
+      return
+    }
+    setRouterNotice(data.message || `Imported ${data.total} leases`)
+    setRouterPass('')
+    loadServers()
+    loadAllLeases()
+  }
 
   const handleSelectServer = (svr: DhcpServer) => {
     setSelected(svr); setSelectedPool(null); setShowPoolForm(false); setShowResForm(false); setShowLeaseForm(false)
@@ -185,7 +267,78 @@ export function DhcpPanel() {
 
   return (
     <section className="space-y-6">
-      <PageHeader title="DHCP" description="Servers, pools, leases, and static reservations." />
+      <PageHeader title="DHCP" description="Run NexusOps as the LAN DHCP server, or import the table from your router." />
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className={card}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Local DHCP server</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{local?.detail || 'Load status…'}</p>
+            </div>
+            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${local?.enabled ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/10 text-slate-400'}`}>
+              {local?.enabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-amber-200/90">{local?.warning}</p>
+          {localErr ? <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{localErr}</p> : null}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button type="button" disabled={localBusy || local?.enabled} onClick={() => void toggleLocal(true)} className={btnPrimary}>
+              Enable local DHCP
+            </button>
+            <button type="button" disabled={localBusy || !local?.enabled} onClick={() => void toggleLocal(false)} className={btnDanger}>
+              Disable
+            </button>
+            <span className="text-xs text-slate-500">{local?.pools ?? 0} pools · {local?.reservations ?? 0} reservations</span>
+          </div>
+        </div>
+
+        <form onSubmit={fetchRouter} className={card}>
+          <h3 className="text-sm font-semibold text-white">Fetch router DHCP table</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">OpenWrt, MikroTik, OPNsense, UniFi, or paste a lease dump if the router has no API.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={label}>Router type</label>
+              <select value={routerType} onChange={(e) => setRouterType(e.target.value)} className={input}>
+                <option value="auto">Auto-detect</option>
+                <option value="openwrt">OpenWrt</option>
+                <option value="mikrotik">MikroTik</option>
+                <option value="opnsense">OPNsense</option>
+                <option value="unifi">UniFi</option>
+              </select>
+            </div>
+            <div>
+              <label className={label}>Router IP</label>
+              <input value={routerHost} onChange={(e) => setRouterHost(e.target.value)} className={`${input} font-mono`} placeholder="192.168.1.1" />
+            </div>
+            <div>
+              <label className={label}>Username / API key</label>
+              <input value={routerUser} onChange={(e) => setRouterUser(e.target.value)} className={input} />
+            </div>
+            <div>
+              <label className={label}>Password / secret</label>
+              <input type="password" value={routerPass} onChange={(e) => setRouterPass(e.target.value)} className={input} placeholder="Saved after the first fetch" />
+            </div>
+            <div>
+              <label className={label}>Port (optional)</label>
+              <input value={routerPort} onChange={(e) => setRouterPort(e.target.value)} className={input} placeholder="80 / 443 / 8443" />
+            </div>
+            <label className="flex items-end gap-2 pb-2 text-sm text-slate-300">
+              <input type="checkbox" checked={routerHttps} onChange={(e) => setRouterHttps(e.target.checked)} className="h-4 w-4" />
+              HTTPS
+            </label>
+            <div className="sm:col-span-2">
+              <label className={label}>Or paste lease table</label>
+              <textarea value={routerPaste} onChange={(e) => setRouterPaste(e.target.value)} rows={3} className={input} placeholder="192.168.1.24 aa:bb:cc:dd:ee:ff phone" />
+            </div>
+          </div>
+          {routerErr ? <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{routerErr}</p> : null}
+          {routerNotice ? <p className="mt-3 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{routerNotice}</p> : null}
+          <div className="mt-4">
+            <button type="submit" disabled={routerBusy} className={btnPrimary}>{routerBusy ? 'Fetching…' : 'Fetch DHCP table'}</button>
+          </div>
+        </form>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
         {/* left: server + pool tree */}

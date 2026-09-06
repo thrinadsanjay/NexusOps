@@ -329,6 +329,15 @@ class DhcpServer(Base):
     host: Mapped[str] = Column(String(255), nullable=False)          # IP or hostname of the DHCP server/router
     description: Mapped[str | None] = Column(String(255), nullable=True)
     status: Mapped[str] = Column(String(40), default="active", nullable=False)
+    kind: Mapped[str] = Column(String(20), default="registry", nullable=False)  # registry | local | router
+    router_type: Mapped[str | None] = Column(String(40), nullable=True)  # auto | openwrt | mikrotik | opnsense | unifi
+    router_username: Mapped[str | None] = Column(String(120), nullable=True)
+    router_password_encrypted: Mapped[str | None] = Column(Text, nullable=True)
+    router_port: Mapped[int | None] = Column(Integer, nullable=True)
+    router_https: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    last_fetch_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
+    last_fetch_error: Mapped[str | None] = Column(Text, nullable=True)
+    last_fetch_count: Mapped[int | None] = Column(Integer, nullable=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -367,6 +376,7 @@ class DhcpLease(Base):
     lease_start: Mapped[datetime | None] = Column(DateTime, nullable=True)
     lease_end: Mapped[datetime | None] = Column(DateTime, nullable=True)
     last_seen_at: Mapped[datetime | None] = Column(DateTime, nullable=True)
+    source: Mapped[str] = Column(String(20), default="manual", nullable=False)  # manual | router | local
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
