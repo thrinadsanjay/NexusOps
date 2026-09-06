@@ -23,7 +23,7 @@ def test_list_services_without_docker() -> None:
     assert listed.status_code == 200, listed.text
     rows = listed.json()
     ids = [item["id"] for item in rows]
-    assert ids == ["postgres", "redis", "backend", "worker", "frontend", "openldap", "smtp"]
+    assert ids == ["postgres", "redis", "backend", "worker", "frontend", "openldap", "dhcp", "smtp"]
     smtp = next(item for item in rows if item["id"] == "smtp")
     assert smtp["kind"] == "process"
     assert smtp["controllable"] is True

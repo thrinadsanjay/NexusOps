@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     smtp_listen_port: int = Field(default=2525)
     smtp_published_port: int = Field(default=25)
     docker_socket: str = Field(default="/var/run/docker.sock")
+    dhcp_data_dir: str = Field(default="/var/lib/nexusops-dhcp")
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
