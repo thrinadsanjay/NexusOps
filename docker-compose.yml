@@ -51,6 +51,7 @@ x-backend-environment: &backend-environment
   SMTP_LISTEN_PORT: ${SMTP_LISTEN_PORT:-2525}
   SMTP_PUBLISHED_PORT: ${SMTP_PORT:-25}
   PYTHONPATH: /app
+  DHCP_DATA_DIR: /var/lib/nexusops-dhcp
   # Import-time DB init races uvicorn's already-running loop (uvloop teardown).
   NEXUSOPS_SKIP_IMPORT_BOOTSTRAP: "1"
 
@@ -126,6 +127,7 @@ services:
     volumes:
       # Optional: lets the dashboard start/stop/restart compose services.
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - dhcp_data:/var/lib/nexusops-dhcp:Z
     cap_add:
       # ICMP ping for subnet scan. NET_ADMIN is omitted: on Proxmox LXC it
       # often yields PermissionError at process start without helping ping.
@@ -170,6 +172,33 @@ services:
       backend:
         condition: service_healthy
     command: celery -A app.worker worker --beat --loglevel=info
+
+  dhcp:
+    # Host network so DHCP broadcasts on UDP 67 reach the LAN. Disabled until
+    # Mail/DHCP page writes the enabled flag. Do not run this with router DHCP.
+    <<: *pve-compat
+    image: ${NEXUSOPS_BACKEND_IMAGE:-ghcr.io/thrinadsanjay/nexusops-backend:latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
+    container_name: nexusops-dhcp
+    restart: unless-stopped
+    pull_policy: ${PULL_POLICY:-missing}
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    environment:
+      DHCP_DATA_DIR: /var/lib/nexusops-dhcp
+    volumes:
+      - dhcp_data:/var/lib/nexusops-dhcp:Z
+    command: ["/app/scripts/dhcp-entrypoint.sh"]
+    depends_on:
+      backend:
+        condition: service_healthy
 
   frontend:
     <<: *pve-compat
@@ -238,3 +267,4 @@ volumes:
   redis_data:
   ldap_data:
   ldap_config:
+  dhcp_data:
