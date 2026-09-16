@@ -503,6 +503,7 @@ class DhcpLeaseRead(BaseModel):
     lease_start: datetime | None = None
     lease_end: datetime | None = None
     last_seen_at: datetime | None = None
+    source: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -576,6 +577,15 @@ class DhcpServerRead(BaseModel):
     host: str
     description: str | None = None
     status: str
+    kind: str = "registry"
+    router_type: str | None = None
+    router_username: str | None = None
+    has_router_password: bool = False
+    router_port: int | None = None
+    router_https: bool = False
+    last_fetch_at: datetime | None = None
+    last_fetch_error: str | None = None
+    last_fetch_count: int | None = None
     created_at: datetime
     updated_at: datetime
     pools: list[DhcpPoolRead] = []
@@ -586,6 +596,7 @@ class DhcpServerCreate(BaseModel):
     host: str = Field(min_length=1, max_length=255)
     description: str | None = None
     status: str = "active"
+    kind: str = "registry"
 
 
 class DhcpServerUpdate(BaseModel):
@@ -593,6 +604,41 @@ class DhcpServerUpdate(BaseModel):
     host: str | None = None
     description: str | None = None
     status: str | None = None
+    kind: str | None = None
+
+
+class DhcpLocalStatus(BaseModel):
+    enabled: bool
+    running: bool
+    server_id: int | None = None
+    pools: int = 0
+    reservations: int = 0
+    leases: int = 0
+    detail: str
+    warning: str
+
+
+class DhcpRouterFetchRequest(BaseModel):
+    host: str | None = None
+    router_type: str = "auto"
+    username: str | None = None
+    password: str | None = None
+    port: int | None = None
+    https: bool = False
+    server_id: int | None = None
+    pool_id: int | None = None
+    lease_text: str | None = None
+    name: str | None = None
+
+
+class DhcpRouterFetchResult(BaseModel):
+    router_type: str
+    added: int
+    updated: int
+    total: int
+    server_id: int
+    pool_id: int | None = None
+    message: str
 
 
 # ---------------------------------------------------------------------------

@@ -433,7 +433,9 @@ export function Dashboard({ userName }: { userName: string }) {
               <>
                 <p className="text-sm font-medium text-slate-200">No active leases</p>
                 <p className="mt-1 max-w-[16rem] text-xs leading-5 text-slate-500">
-                  {stats && stats.dhcp.total_servers > 0 ? 'DHCP server is registered and ready.' : 'DHCP is a registry here. Keep leases on your router unless you take over the LAN.'}
+                  {stats && stats.dhcp.total_servers > 0
+                    ? 'DHCP server is registered and ready.'
+                    : 'Enable local DHCP or fetch the table from your router on the DHCP page.'}
                 </p>
               </>
             )}

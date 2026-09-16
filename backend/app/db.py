@@ -97,6 +97,20 @@ def _sqlite_add_missing_columns() -> None:
         "dns_records": {
             "cloudflare_record_id": "VARCHAR(64)",
         },
+        "dhcp_servers": {
+            "kind": "VARCHAR(20) DEFAULT 'registry'",
+            "router_type": "VARCHAR(40)",
+            "router_username": "VARCHAR(120)",
+            "router_password_encrypted": "TEXT",
+            "router_port": "INTEGER",
+            "router_https": "BOOLEAN DEFAULT 0",
+            "last_fetch_at": "DATETIME",
+            "last_fetch_error": "TEXT",
+            "last_fetch_count": "INTEGER",
+        },
+        "dhcp_leases": {
+            "source": "VARCHAR(20) DEFAULT 'manual'",
+        },
     }
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())

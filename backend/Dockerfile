@@ -11,9 +11,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=300
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends dnsmasq \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
+RUN chmod +x /app/scripts/dhcp-entrypoint.sh
 
 EXPOSE 8000
 

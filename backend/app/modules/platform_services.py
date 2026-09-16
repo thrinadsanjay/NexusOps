@@ -42,6 +42,7 @@ CATALOG: list[ServiceSpec] = [
     ServiceSpec("worker", "Worker", "jobs", "container", "nexusops-worker", None, None),
     ServiceSpec("frontend", "Web UI", "control-plane", "container", "nexusops-frontend", "frontend", 5173),
     ServiceSpec("openldap", "Directory", "identity", "container", "nexusops-ldap", "openldap", 389),
+    ServiceSpec("dhcp", "DHCP", "network", "container", "nexusops-dhcp", None, None),
     ServiceSpec("smtp", "SMTP listener", "mail", "process", None, "127.0.0.1", None),
 ]
 
